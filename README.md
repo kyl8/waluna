@@ -1,4 +1,4 @@
-🌙 Waluna
+# 🌙 Waluna
 
 Waluna é um projeto em Rust que:
 
