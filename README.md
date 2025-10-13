@@ -20,6 +20,6 @@ Waluna é um projeto em Rust que visa democratizar o acesso à 7 arte de forma s
     {"type":"m3u8","url":"https://cdn.example.com/stream/vingadores/master.m3u8"},
     {"type":"video","url":"https://media.example.com/videos/vingadores.mp4"}
   ],
-  "cache_dir":"cache/1700000000-123456
+  "cache_dir":"cache/1700000000-123456"
   ```
 
