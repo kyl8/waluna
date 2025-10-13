@@ -7,8 +7,8 @@ Waluna é um projeto em Rust que visa democratizar o acesso à 7 arte de forma s
 - Front-end rápido e intuitivo, com player embutido que lê as playlists geradas via HLS e roda o vídeo enquanto ele é baixado.
 
 # Future updates
-- SISTEMA DE PLUGIN
-Um sistema baseado em webscraping utilizando a linguagem de programação lua como primária. O código deverá ser um arquivo .lua simples (sitedefilmes.lua) que retorna um json com links de playlists m3u8, vídeos ou o diretório local dos vídeos cacheados e baixados associados com um id único gerado pela pesquisa do usuário.
+SISTEMA DE PLUGIN
+- Um sistema baseado em webscraping utilizando a linguagem de programação lua como primária. O código deverá ser um arquivo .lua simples (sitedefilmes.lua) que retorna um json com links de playlists m3u8, vídeos ou o diretório local dos vídeos cacheados e baixados associados com um id único gerado pela pesquisa do usuário.
   Exemplo de retorno:
   ```json
   {
