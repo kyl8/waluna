@@ -1,16 +1,6 @@
-/**
- * Image optimization utilities for aggressive performance
- * - Lazy loading with blur hash placeholders
- * - WebP format support with fallbacks
- * - Image caching and prefetching
- */
-
+// some image optimazation utilities - lazy loading, blur hash, caching
 import { indexedDBCache, STORES } from '../cache/indexedDb.js';
 
-/**
- * Generate blur hash placeholder for images
- * Simple hash-based placeholder string for visuals during load
- */
 export function generateBlurHash(url) {
   let hash = 0;
   for (let i = 0; i < url.length; i++) {
@@ -24,14 +14,8 @@ export function generateBlurHash(url) {
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 }
 
-/**
- * Optimize image URL for lazy loading
- * Converts to smaller thumbnail initially
- */
 export function optimizeImageUrl(url, thumbnail = true) {
   if (!url) return null;
-
-  // For image services that support sizing
   if (thumbnail && url.includes('image.tmdb.org')) {
     return url.replace('/original/', '/w154/');
   }
@@ -39,9 +23,7 @@ export function optimizeImageUrl(url, thumbnail = true) {
   return url;
 }
 
-/**
- * Preload image for critical images
- */
+// preload images
 export function preloadImage(src) {
   if (!src) return;
 
@@ -50,9 +32,7 @@ export function preloadImage(src) {
   img.loading = 'eager';
 }
 
-/**
- * Prefetch images for likely next navigations
- */
+// prefetch images during idle
 export function prefetchImages(urls = []) {
   if ('requestIdleCallback' in window) {
     requestIdleCallback(() => {
@@ -75,17 +55,13 @@ export function prefetchImages(urls = []) {
   }
 }
 
-/**
- * Cache image in IndexedDB
- */
+// cache image url in indexeddb
 export async function cacheImageUrl(url) {
   if (!url) return;
 
   try {
     const cached = await indexedDBCache.get(STORES.IMAGES, url);
-    if (cached) return; // Already cached
-
-    // Cache the URL reference (actual binary caching done by Service Worker)
+    if (cached) return; 
     await indexedDBCache.set(
       STORES.IMAGES,
       url,
@@ -93,24 +69,18 @@ export async function cacheImageUrl(url) {
       24 * 60 * 60 * 1000 // 24 hours
     );
   } catch {
-    // Silent fail for IndexedDB operations
+    // pass
   }
 }
 
-/**
- * Batch cache multiple images
- */
+// batch cache helper
 export function batchCacheImages(urls = []) {
   urls.forEach(url => cacheImageUrl(url));
 }
 
-/**
- * Get WebP fallback chain for image src
- */
+// srcset helper (noop)
 export function getSrcSet(baseUrl) {
   if (!baseUrl) return baseUrl;
-
-  // Return srcSet format: original image with fallback
   return baseUrl;
 }
 

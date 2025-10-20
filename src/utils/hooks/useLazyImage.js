@@ -17,14 +17,14 @@ export function useLazyImage(imageSrc, options = {}) {
     enablePreload = false 
   } = options;
 
-  // try to load from IndexedDB cache first
+  // try to load from indexeddb cache first
   const loadFromCache = useCallback(async () => {
     if (!enableIndexedDB || !imageSrc) return null;
 
     try {
       const cached = await indexedDBCache.get(STORES.IMAGES, imageSrc);
       if (cached) {
-        // dependendo do shape salvo, cached pode conter o próprio item
+        // depending on saved shape, cached may contain the item itself
         setSrc(imageSrc);
         setLoaded(true);
         return true;
@@ -35,10 +35,10 @@ export function useLazyImage(imageSrc, options = {}) {
     return false;
   }, [imageSrc, enableIndexedDB]);
 
-  // observer setup
+  // intersection observer setup
   useEffect(() => {
     if (enablePreload && imageSrc) {
-      // Preload mode - load immediately
+      // preload mode - load immediately
       loadFromCache().then(wasCached => {
         if (!wasCached) {
           setSrc(imageSrc);
@@ -55,7 +55,7 @@ export function useLazyImage(imageSrc, options = {}) {
           loadFromCache().then(wasCached => {
             if (!wasCached) {
               setSrc(imageSrc);
-              // Cache in IndexedDB
+              // cache in IndexedDB
               if (enableIndexedDB) {
                 cacheImageUrl(imageSrc);
               }
@@ -70,6 +70,7 @@ export function useLazyImage(imageSrc, options = {}) {
     };
 
     try {
+      // create intersection observer
       observerRef.current = new IntersectionObserver(observerCallback, {
         threshold,
         rootMargin,
@@ -77,6 +78,7 @@ export function useLazyImage(imageSrc, options = {}) {
 
       observerRef.current.observe(imgRef.current);
     } catch {
+      // fallback: just set src
       setSrc(imageSrc);
     }
 

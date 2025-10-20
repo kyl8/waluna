@@ -4,7 +4,7 @@ import logger from '../utils/helpers/logger.js';
 
 let cachedFixedSizeList = null;
 
-// usa react_window FixedSizeList quando disponível, caso contrário, usa implementação interna simples.
+// use react-window FixedSizeList when available, otherwise fallback to simple rendering
 function VirtualListInner({ items = [], rowHeight = 112, height = 400, width = '100%', overscan = 3, renderItem, showSort = false, sortKey = 'number' }) {
   const [FixedSizeListComp, setFixedSizeListComp] = useState(null);
   const [sortMode, setSortMode] = useState('ascending'); // 'ascending' | 'descending'
@@ -73,7 +73,7 @@ function VirtualListInner({ items = [], rowHeight = 112, height = 400, width = '
     );
   }
 
-  // fallback: react-window não disponível — renderiza lista simples para garantir conteúdo visível
+  // fallback: react-window not available — render simple list
   logger?.warn?.('react-window not available, rendering fallback list');
   return (
     <Box width={width}>
