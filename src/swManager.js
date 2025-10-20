@@ -1,6 +1,5 @@
-// ONLY register Service Worker in production, NOT in development
+// registra o service worker apenas em produção
 if (import.meta.env.PROD) {
-  // Register service worker for production only
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js').then((registration) => {
@@ -11,7 +10,7 @@ if (import.meta.env.PROD) {
     });
   }
 } else {
-  // In development, prevent any SW registration
+  // em desenvolvimento, previne o uso de service workers
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then((registrations) => {
       registrations.forEach((registration) => {

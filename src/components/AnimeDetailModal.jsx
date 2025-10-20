@@ -63,17 +63,17 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
     const loadAnimeDetails = async () => {
       setLoading(true);
 
-      // usa os dados do anime que já vem da busca (searchbar)
+      // use data from prop first
       setAnimeDetails(anime);
 
       try {
         logger.debug('📦 Carregando episódios do anime:', anime.title || anime.title_english || anime.name || anime.titles?.[0]?.title);
 
-        // tenta usar anilist_id se já estiver presente
+        // tries to use anilist_id when possible
         let anilistId = anime.anilist_id || anime.id || null;
         if (anilistId) anilistId = Number(anilistId);
 
-        // busca os episódios. Passe um objeto com ambos os ids quando possível
+        // search for episodes. Pass an object with both ids when possible
         const fetchParam = {
           anilist_id: anilistId || null,
           mal_id: anime.mal_id || anime.idMal || null
@@ -163,7 +163,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
   const getTitle = memoizedHelpers.getTitle;
   const getImage = memoizedHelpers.getImage;
 
-  // Usa animeDetails se disponível, senão usa anime
+  // use animedetails if available, else use anime
   const EpisodeRowInner = ({ ep, style, index, shouldReduceMotion }) => {
     const formattedDate = ep.airDate ? new Date(ep.airDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
     const episodeLabel = Number.isFinite(ep.number) ? `EP ${ep.number}` : 'EP N/A';
