@@ -21,5 +21,6 @@ SISTEMA DE PLUGIN
     {"type":"video","url":"https://media.example.com/videos/vingadores.mp4"}
   ],
   "cache_dir":"cache/1700000000-123456"
+  }
   ```
 
