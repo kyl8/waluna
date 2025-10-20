@@ -1,0 +1,24 @@
+* {
+  -webkit-font-smoothing: subpixel-antialiased;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+body {
+  contain: layout style paint;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* so transições baratas */
+  * {
+    transition-property: background-color, border-color, opacity, color;
+    transition-duration: 100ms;
+    transition-timing-function: ease-out;
+  }
+}
+
+/* otimiza scrolling */
+.scroll-container {
+  contain: layout style paint;
+  will-change: scroll-position;
+}

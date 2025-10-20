@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Waluna</title>
+    
+    <script>
+      // Block Service Worker in dev before anything loads
+      if ('serviceWorker' in navigator) {
+        const originalRegister = navigator.serviceWorker.register;
+        navigator.serviceWorker.register = function(scriptURL) {
+          console.log('❌ SW registration blocked in development');
+          return Promise.reject(new Error('SW disabled in dev'));
+        };
+        
+        // Unregister all existing
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((reg) => reg.unregister());
+        });
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

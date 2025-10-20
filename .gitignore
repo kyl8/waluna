@@ -1,0 +1,63 @@
+# Node / package
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+.pnpm-debug.log
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+coverage/
+.esbuild/
+out/
+*.tgz
+
+# Vite / Rollup / caches
+.vite/
+.rollup.cache
+.cache/
+.cache-loader/
+.cache-webpack/
+.nyc_output/
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Env files
+.env
+.env.*.local
+.local
+.local.*.env
+
+# IDE/editor
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS / misc
+*.tmp
+*.temp
+*.bak
+*.orig
+
+
+# CI
+dist/
+
+
+# End of file
