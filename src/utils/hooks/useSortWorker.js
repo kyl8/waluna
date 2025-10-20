@@ -12,18 +12,18 @@ export function useSortWorker(episodes, sortMode, animeId) {
 	const isCleaningUpRef = useRef(false);
 	const debounceRef = useRef(null);
 	
-	// Normalize sort mode
+	// normalize sort mode
 	const normalizedSortMode = sortMode === 'descending' ? 'descending' : 'ascending';
 	
 	useEffect(() => {
-		// Reset cleanup flag
+		// reset
 		isCleaningUpRef.current = false;
 		
-		// Check if anime changed
+		// check if animeId changed
 		const animeChanged = animeId !== prevAnimeIdRef.current;
 		prevAnimeIdRef.current = animeId;
 		
-		// CLEAR episodes immediately on anime change
+		// clear episodes immediately on anime change
 		if (animeChanged) {
 			isCurrentAnimeRef.current = false;
 			
@@ -40,20 +40,20 @@ export function useSortWorker(episodes, sortMode, animeId) {
 			taskIdRef.current++;
 			isCurrentAnimeRef.current = true;
 			
-			// Clear immediately without blocking
+			// clear without blocking main thread
 			startTransition(() => {
 				setSortedEpisodes([]);
 			});
 		}
 		
-		// Don't process if no episodes
+		// don't process if no episodes
 		if (!episodes || episodes.length === 0) {
 			setSortedEpisodes([]);
 			setIsPending(false);
 			return;
 		}
 
-		// Debounce by 50ms only
+		// 50ms debounce
 		if (debounceRef.current) {
 			clearTimeout(debounceRef.current);
 		}
@@ -68,7 +68,7 @@ export function useSortWorker(episodes, sortMode, animeId) {
 			}
 
 			try {
-				// Load worker from src/workers folder using URL constructor
+				// loading worker
 				const workerUrl = new URL('../../workers/sort.worker.js', import.meta.url);
 				const worker = new Worker(workerUrl, { type: 'module' });
 				workerRef.current = worker;
@@ -83,11 +83,8 @@ export function useSortWorker(episodes, sortMode, animeId) {
 					}
 				}, 3000);
 
-				// Use MessageChannel for true async communication
 				const channel = new MessageChannel();
 				const responsePort = channel.port1;
-
-				// Handle message WITHOUT blocking main thread
 				responsePort.onmessage = (ev) => {
 					clearTimeout(timeoutId);
 					
@@ -96,8 +93,6 @@ export function useSortWorker(episodes, sortMode, animeId) {
 					}
 					
 					const { sorted, error } = ev.data;
-
-					// Schedule state update with LOWER priority - spread across frames
 					if (typeof scheduler !== 'undefined' && scheduler.yield) {
 						scheduler.yield().then(() => {
 							if (!isCurrentAnimeRef.current || taskIdRef.current !== currentTaskId || isCleaningUpRef.current) {
@@ -138,7 +133,6 @@ export function useSortWorker(episodes, sortMode, animeId) {
 					}
 				};
 
-				// Send task with MessageChannel port
 				worker.postMessage(
 					{
 						episodes,
@@ -147,7 +141,7 @@ export function useSortWorker(episodes, sortMode, animeId) {
 						taskId: currentTaskId,
 						port: channel.port2
 					},
-					[channel.port2] // Transfer port ownership
+					[channel.port2] 
 				);
 
 			} catch (err) {

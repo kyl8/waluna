@@ -26,6 +26,7 @@ class IndexedDBCache {
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
 
+        // create stores if missing
         if (!db.objectStoreNames.contains(STORES.ANIME)) {
           db.createObjectStore(STORES.ANIME, { keyPath: 'id' });
         }

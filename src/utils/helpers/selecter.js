@@ -2,6 +2,7 @@ import Fuse from 'fuse.js';
 import names from '../../constants/names.json';
 import logger from './logger.js';
 
+// worker and request bookkeeping
 let fuseWorker = null;
 let nextWorkerRequestId = 1;
 const pendingWorkerResponses = new Map();
@@ -25,10 +26,12 @@ function initWorker() {
   }
 }
 
+// simple sleep helper
 export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 } 
-// processa o termo de busca e retorna um array de termos similares
+
+// process the search term and return similar terms
 export async function process_term(term) {
   if (!term || !term.trim()) return [];
 
@@ -55,14 +58,14 @@ export async function process_term(term) {
   return fuse_term.map(result => result.item);
 }
 
-// compara titulos  e da um array com os retornos q dao match
+// compare titles and return whether there's a match
 export async function is_match(titles, term) {
     const fuse = new Fuse(titles, { includeScore: true, threshold: 0.2 });
     const result = fuse.search(term);
     return result.length > 0;
 }
 
-// verifica qual api esta disponivel e o tempo de resposta
+// check which api is available and measure response time
 export async function what_api_is_available(anime_name) {
   const result = { jikan: [false, 0], anilist: [false, 0] };
 
@@ -90,10 +93,10 @@ export async function what_api_is_available(anime_name) {
     logger.error('AniList API error:', err);
   }
 
-  // aguarda um pouco antes de testar jikan (rate limit de 1 req/sec)
+  // waits a lil for rate limit
   await sleep(2000);
 
-  // testa jikan api
+  // tests jikan api
   try {
     let start_time = performance.now();
     const jikan = await fetch(
@@ -108,7 +111,7 @@ export async function what_api_is_available(anime_name) {
   return result;
 }
 
-// seleciona a melhor api disponivel
+// select the best available source based on response times
 export async function select_available_source(anime_name) {
   const availability = await what_api_is_available(anime_name);
   let best_source = null;

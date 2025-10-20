@@ -142,7 +142,7 @@ const EpisodesList = ({
   const isLoadingRef = useRef(false);
   const debounceRef = useRef(null);
 
-  // Infinite scroll com Intersection Observer otimizado
+  // infinite scroll using intersection observer
   useEffect(() => {
     const observer = new IntersectionObserver(
       entries => {

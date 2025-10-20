@@ -362,9 +362,9 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
                     <VStack align="stretch" spacing={6}>
                       {/* Sinopse */}
                       <Box>
-                        <Text fontSize="xl" fontWeight="bold" mb={3}>Sinopse</Text>
+                        <Text fontSize="xl" fontWeight="bold" mb={3}>synopsis</Text>
                         <Text fontSize="sm" color="gray.300" lineHeight="tall">
-                          {displayData.synopsis || 'Sem sinopse disponível.'}
+                          {displayData.synopsis || 'No synopsis available.'}
                         </Text>
                       </Box>
 

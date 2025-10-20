@@ -1,11 +1,11 @@
 import { process_term, sleep } from "../helpers/selecter.js";
 import logger from '../helpers/logger.js';
 
-// busca animes no anilist via GraphQL
+// search anilist via graphql
 export async function fetch_anilist_data(anime_name) {
   const results = [];
   
-  logger.debug("🔍 Buscando no AniList:", anime_name);
+  logger.debug("🔍 searching AniList:", anime_name);
 
   const query = `
     query ($search: String, $perPage: Int) {
@@ -39,7 +39,7 @@ export async function fetch_anilist_data(anime_name) {
   `;
 
   try {
-    // busca direta
+    // map formats and seasons
     const formatMap = {
       'TV': 'TV',
       'MOVIE': 'Movie',
@@ -72,7 +72,7 @@ export async function fetch_anilist_data(anime_name) {
       
   logger.info("✅ AniList retornou:", animes.length, "resultados");
       
-      // formato anilist -> formato jikan
+      // format anilist -> formato jikan
       const formatMap = {
         'TV': 'TV',
         'MOVIE': 'Movie',
@@ -90,7 +90,7 @@ export async function fetch_anilist_data(anime_name) {
         'FALL': 'fall'
       };
       
-      // formato anilist -> formato jikan
+      // format anilist -> formato jikan
       for (const anime of animes) {
         results.push({
           term: anime_name,
@@ -123,8 +123,8 @@ export async function fetch_anilist_data(anime_name) {
       return results;
     }
 
-  // fallback usando fuzzy search com termos processados
-  logger.warn("⚠️ Busca direta AniList vazia, tentando termos processados...");
+    // fallback using fuzzy search with processed terms
+    logger.warn("⚠️ empty direct AniList search, trying processed terms...");
     const processed_terms = await process_term(anime_name);
     
     if (!processed_terms || processed_terms.length === 0) {
@@ -178,7 +178,7 @@ export async function fetch_anilist_data(anime_name) {
           }
         }
 
-        await sleep(500); // delay menor que jikan
+        await sleep(500); // anilist delay is smaller than jikan
         } catch (error) {
         logger.error(`❌ Erro ao buscar "${term}" no AniList:`, error);
       }
@@ -191,7 +191,7 @@ export async function fetch_anilist_data(anime_name) {
     return results;
 
     } catch (error) {
-    logger.error("❌ Erro na busca AniList:", error);
+    logger.error("❌ error in AniList search:", error);
     throw error;
   }
 }
