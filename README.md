@@ -22,9 +22,7 @@ SISTEMA DE PLUGIN
   ],
   "cache_dir":"cache/1700000000-123456"
   }
-
+  ```
 TEMAS DIVERSOS E SUPORTE PARA INGLÊS
 - Sistema de temas: Darkmode, Lightmode, Ultradark, etc.
 - Traduzir o frontend e algumas outras coisas para o inglês. Visto que ainda há uma mistura imensa das duas línguas até no site (botões em inglês e português etc.) e até no próprio código. Gostaria de normatizar isso.
-  ```
-
