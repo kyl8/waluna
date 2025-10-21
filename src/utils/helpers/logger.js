@@ -1,9 +1,9 @@
 import pino from 'pino';
 
-// Detecta nível de log do ambiente
+// detect log level from environment
 const LOG_LEVEL = import.meta.env.VITE_LOG_LEVEL || (import.meta.env.DEV ? 'debug' : 'info');
 
-// Configuração do Pino logger
+// pino logger instance
 const pinoLogger = pino({
   level: LOG_LEVEL,
   transport: {

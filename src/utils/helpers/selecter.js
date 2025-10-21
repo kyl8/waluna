@@ -2,7 +2,6 @@ import Fuse from 'fuse.js';
 import names from '../../constants/names.json';
 import logger from './logger.js';
 
-// worker and request bookkeeping
 let fuseWorker = null;
 let nextWorkerRequestId = 1;
 const pendingWorkerResponses = new Map();
@@ -10,7 +9,7 @@ const pendingWorkerResponses = new Map();
 function initWorker() {
   if (fuseWorker) return;
   try {
-    // worker está em src/workers/fuse.worker.js — do arquivo src/utils/helpers/selecter.js
+    // worker is located at src/workers/fuse.worker.js — from src/utils/helpers/selecter.js
     fuseWorker = new Worker(new URL('../../workers/fuse.worker.js', import.meta.url));
     fuseWorker.onmessage = (ev) => {
       const { id, results, error } = ev.data || {};
@@ -69,7 +68,7 @@ export async function is_match(titles, term) {
 export async function what_api_is_available(anime_name) {
   const result = { jikan: [false, 0], anilist: [false, 0] };
 
-  // testa anilist api primeiro (sem rate limit)
+  // test anilist api first
   try {
     const query = `
       query ($search: String) {

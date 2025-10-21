@@ -1,5 +1,4 @@
-﻿// src/components/SearchContainer.jsx
-import React, { useState, useRef, useCallback, useDeferredValue, useEffect, useMemo, Suspense } from 'react';
+﻿import React, { useState, useRef, useCallback, useDeferredValue, useEffect, useMemo, Suspense } from 'react';
 import { useApi } from '../contexts/ApiContext';
 import { fetch_jikan_data } from '../utils/api/jikan.js';
 import { fetch_anilist_data } from '../utils/api/anilist.js';
@@ -94,7 +93,7 @@ const SearchContainer = () => {
       
       try {
         if (!bestApi) {
-          throw new Error('Nenhuma API disponível no momento. Tentando novamente...');
+          throw new Error('No api available, trying again...');
         }
         
         let data;
@@ -126,7 +125,7 @@ const SearchContainer = () => {
         setResults(uniqueResults);
         setError(null);
       } catch (err) {
-        setError(err.message || 'Erro ao buscar animes');
+        setError(err.message || 'Error loading animes');
         setResults([]);
         
         // retesta api

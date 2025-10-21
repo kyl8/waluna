@@ -222,10 +222,9 @@ const EpisodeDetailModal = ({ isOpen, onClose, episode }) => {
 
           <ModalBody p={6} ref={containerRef}>
             <VStack align="stretch" spacing={6}>
-              {/* description */}
               {episode.overview && (
                 <Box>
-                  <Text fontSize="lg" fontWeight="bold" mb={2}>description</Text>
+                  <Text fontSize="lg" fontWeight="bold" mb={2}>Descrição</Text>
                   <Text fontSize="sm" color="gray.300" lineHeight="tall">
                     {episode.overview}
                   </Text>
@@ -234,7 +233,6 @@ const EpisodeDetailModal = ({ isOpen, onClose, episode }) => {
 
               <Divider borderColor="#2d2d2d" />
 
-              {/* torrents */}
               <Box overflowX="auto" borderRadius="lg" border="1px solid #2d2d2d"
                 css={{
                   contain: 'layout style paint',

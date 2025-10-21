@@ -10,15 +10,15 @@
     <title>Waluna</title>
     
     <script>
-      // Block Service Worker in dev before anything loads
+      // desativar service worker em desenvolvimento
       if ('serviceWorker' in navigator) {
         const originalRegister = navigator.serviceWorker.register;
         navigator.serviceWorker.register = function(scriptURL) {
           console.log('❌ SW registration blocked in development');
           return Promise.reject(new Error('SW disabled in dev'));
         };
-        
-        // Unregister all existing
+
+        // desativar todos os service workers existentes
         navigator.serviceWorker.getRegistrations().then((regs) => {
           regs.forEach((reg) => reg.unregister());
         });

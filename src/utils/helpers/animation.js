@@ -4,7 +4,7 @@ let frameRate = 60; // default
 let frameTime = 1000 / frameRate;
 const subscribers = new Set();
 
-// detecta refresh rate usando requestAnimationFrame
+// detect refresh rate of the display
 export function detectRefreshRate() {
   return new Promise((resolve) => {
     logger.group('Display Refresh Rate Detection');
@@ -20,25 +20,25 @@ export function detectRefreshRate() {
       frameCount++;
       frameTimes.push(delta);
 
-      // mede 120 frames para mais precisão
+      // measure 120 frames for more accuracy
       if (frameCount < 120) {
         requestAnimationFrame(measureFrame);
       } else {
-        // calcula estatísticas
+        // calculate statistics
         const avgFrameTime = frameTimes.reduce((a, b) => a + b, 0) / frameCount;
         const minFrameTime = Math.min(...frameTimes);
         const maxFrameTime = Math.max(...frameTimes);
         const medianFrameTime = frameTimes.sort((a, b) => a - b)[Math.floor(frameCount / 2)];
         
-        // detecta Hz pela média e mediana
+        // detect hz by mean and median
         const avgHz = Math.round(1000 / avgFrameTime);
         const medianHz = Math.round(1000 / medianFrameTime);
-        
-        // usa mediana como mais confiável
+
+        // use median as more reliable
         frameRate = medianHz;
         frameTime = 1000 / frameRate;
 
-        // quando a medição termina atualiza frameRate/frameTime e notifica inscritos
+        // when measurement ends, update frameRate/frameTime and notify subscribers
         subscribers.forEach((fn) => {
           try { fn(frameRate); } catch (e) { /* ignore */ }
         });
@@ -63,7 +63,7 @@ export function detectRefreshRate() {
   });
 }
 
-// retorna duração de transição otimizada para o refresh rate
+// returns optimal duration in ms for given base duration
 export function getOptimalDuration(baseDuration = 100) {
   const frames = Math.round((baseDuration / 1000) * frameRate);
   const optimalDuration = (frames / frameRate) * 1000;
@@ -79,12 +79,12 @@ export function getOptimalDuration(baseDuration = 100) {
   return optimalDuration;
 }
 
-// executa callback sincronizado com refresh rate
+// executes callback synchronized with refresh rate
 export function onNextFrame(callback) {
   requestAnimationFrame(callback);
 }
 
-// executa callback após N frames
+// executes callback after N frames
 export function afterFrames(frames, callback) {
   let count = 0;
   function tick() {
@@ -98,21 +98,21 @@ export function afterFrames(frames, callback) {
   requestAnimationFrame(tick);
 }
 
-// retorna duração em ms para N frames
+// returns duration in ms for N frames
 export function framesToMs(frames) {
   return (frames / frameRate) * 1000;
 }
 
-// retorna número de frames para N ms
+// returns number of frames for N ms
 export function msToFrames(ms) {
   return Math.round((ms / 1000) * frameRate);
 }
 
-// subscription helpers (ja exportadas)
+// subscription helpers (already exported)
 export function subscribeFrameRate(fn) {
   if (typeof fn === 'function') {
     subscribers.add(fn);
-    // notifica imediatamente com o valor atual
+    // notify immediately with current value
     try { fn(frameRate); } catch (e) { /* ignore */ }
   }
   return () => unsubscribeFrameRate(fn);

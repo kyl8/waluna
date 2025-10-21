@@ -5,7 +5,7 @@ export async function fetch_anizip_data(fetchParam) {
   const results = [];
 
   if (!fetchParam) {
-    logger.warn('⚠️ Sem id fornecido para AniZip');
+    logger.warn('⚠️ no id provided for AniZip');
     return results;
   }
 
@@ -26,7 +26,7 @@ export async function fetch_anizip_data(fetchParam) {
   if (malCandidate) tryOrder.push({ type: 'mal_id', value: Number(malCandidate) });
 
   if (tryOrder.length === 0) {
-    logger.warn('⚠️ Sem id válido fornecido para AniZip');
+    logger.warn('⚠️ no valid id provided for AniZip');
     return results;
   }
 
@@ -37,13 +37,13 @@ export async function fetch_anizip_data(fetchParam) {
     if (!idValue || Number.isNaN(idValue)) continue;
 
     const paramName = candidate.type;
-    logger.debug(`🔍 pesquisando (${paramName}):`, idValue);
+    logger.debug(`🔍 searching (${paramName}):`, idValue);
 
     try {
       const url = `https://api.ani.zip/mappings?${paramName}=${encodeURIComponent(idValue)}`;
       const resp = await fetch(url);
       if (!resp.ok) {
-        logger.warn(`Anizip retornou erro: ${paramName}=${idValue}:`, resp.status);
+        logger.warn(`Anizip returned error: ${paramName}=${idValue}:`, resp.status);
         continue;
       }
 
@@ -51,7 +51,7 @@ export async function fetch_anizip_data(fetchParam) {
       mapping = json;
       break;
     } catch (err) {
-      logger.warn(`Erro de request: ${paramName}=${idValue}:`, err);
+      logger.warn(`Error fetching: ${paramName}=${idValue}:`, err);
       continue;
     }
   }
@@ -70,7 +70,7 @@ export async function fetch_anizip_data(fetchParam) {
   if (mapping.episodes) {
     const keys = Object.keys(mapping.episodes).sort((a,b) => Number(a)-Number(b));
 
-    logger.info(`📊 total de episódios brutos da API: ${keys.length}`);
+    logger.info(`📊 total episodes from API: ${keys.length}`);
 
     // filter numeric episode keys and exclude special/OVA keys
     const validKeys = keys.filter(key => {
@@ -90,7 +90,7 @@ export async function fetch_anizip_data(fetchParam) {
         return true;
       });
 
-    logger.info(`✅ episódios após filtro: ${validKeys.length} (removidos ${keys.length - validKeys.length} specials/ovas)`);
+    logger.info(`✅ episodes after filter: ${validKeys.length} (removed ${keys.length - validKeys.length} specials/ovas)`);
 
     if (validKeys.length > 0) {
       // current date to check aired episodes
@@ -130,8 +130,8 @@ export async function fetch_anizip_data(fetchParam) {
           isAired: isAired
         };
       });
-      
-    logger.info(`📺 Total de episódios processados: ${data.episodeList.length}`);
+
+    logger.info(`📺 Total episodes processed: ${data.episodeList.length}`);
     }
   }
 

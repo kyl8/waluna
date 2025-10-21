@@ -2,7 +2,7 @@ import { process_term, sleep } from "../helpers/selecter.js";
 import Fuse from "fuse.js";
 import logger from '../helpers/logger.js';
 
-// extrai os titulos do anime
+// extract all titles from jikan data 
 function get_titles(data) {
   if (!data || !data.titles) return [];
   return data.titles.map(titleObj => titleObj.title);
@@ -10,11 +10,10 @@ function get_titles(data) {
 
 export async function fetch_jikan_data(anime_name) {
   const results = [];
-  
-  logger.debug("🔍 Buscando:", anime_name);
+
+  logger.debug("🔍 Searching:", anime_name);
 
   try {
-    // busca direta na api
     const directResponse = await fetch(
       `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(anime_name)}&limit=15&sfw=true`
     );
@@ -22,30 +21,30 @@ export async function fetch_jikan_data(anime_name) {
     if (directResponse.ok) {
       const directJson = await directResponse.json();
       const directAnimes = directJson.data || [];
-      
-  logger.info("✅ Busca direta retornou:", directAnimes.length, "resultados");
-      
+
+  logger.info("✅ Direct search returned:", directAnimes.length, "results");
+
       for (const anime of directAnimes) {
         results.push({ term: anime_name, data: anime });
       }
     }
 
-    // se achou algo, retorna
+    // if found something, return
     if (results.length > 0) {
       return results;
     }
 
-    // fallback - tenta com termos processados do names.json usando fuzzy match
-  logger.warn("⚠️ Busca direta vazia, tentando termos processados...");
+    // fallback - try with processed terms from names.json using fuzzy match
+  logger.warn("⚠️ Direct search empty, trying processed terms...");
     const processed_terms = await process_term(anime_name);
     
     if (!processed_terms || processed_terms.length === 0) {
-      throw new Error("Nenhum anime encontrado.");
+      throw new Error("No anime found.");
     }
 
-  logger.debug("📋 Termos processados:", processed_terms);
+  logger.debug("📋 Processed terms:", processed_terms);
 
-    const delay = 1.100; // 1.1 segundo entre requisições
+    const delay = 1.100; // 1.1 secs
 
     for (const term of processed_terms) {
       try {
@@ -54,7 +53,7 @@ export async function fetch_jikan_data(anime_name) {
         );
 
         if (!response.ok) {
-          logger.error(`❌ Erro ao buscar "${term}"`);
+          logger.error(`❌ Error fetching "${term}"`);
           continue;
         }
 
@@ -78,20 +77,20 @@ export async function fetch_jikan_data(anime_name) {
           }
         }
       } catch (error) {
-        logger.error(`❌ Erro ao buscar "${term}":`, error);
+        logger.error(`❌ Error fetching "${term}":`, error);
       }
 
       await sleep(delay);
     }
 
     if (results.length === 0) {
-      throw new Error("Nenhum anime correspondente encontrado.");
+      throw new Error("No matching anime found.");
     }
 
     return results;
 
   } catch (error) {
-    logger.error("❌ Erro na busca:", error);
+    logger.error("❌ Error fetching:", error);
     throw error;
   }
 }
