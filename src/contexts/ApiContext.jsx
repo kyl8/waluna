@@ -1,5 +1,3 @@
-// src/contexts/ApiContext.jsx
-/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { what_api_is_available } from '../utils/helpers/selecter.js';
 import logger from '../utils/helpers/logger.js';

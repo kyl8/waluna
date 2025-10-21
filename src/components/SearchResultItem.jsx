@@ -38,7 +38,7 @@ const SearchResultItem = ({ item, onClick }) => {
     };
   }, []);
 
-  // transição otimizada para refresh rate (recalcula quando tick muda)
+  // calculate transition duration based on frame rate  
   const transitionDuration = getOptimalDuration(100);
 
   return (

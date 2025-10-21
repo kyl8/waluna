@@ -69,10 +69,10 @@ export async function fetch_anilist_data(anime_name) {
     if (response.ok) {
       const json = await response.json();
       const animes = json.data?.Page?.media || [];
-      
-  logger.info("✅ AniList retornou:", animes.length, "resultados");
-      
-      // format anilist -> formato jikan
+
+  logger.info("anilist returned: ", animes.length, "results");
+
+      // format anilist -> jikan
       const formatMap = {
         'TV': 'TV',
         'MOVIE': 'Movie',
@@ -90,7 +90,7 @@ export async function fetch_anilist_data(anime_name) {
         'FALL': 'fall'
       };
       
-      // format anilist -> formato jikan
+      // format anilist -> jikan
       for (const anime of animes) {
         results.push({
           term: anime_name,
@@ -128,10 +128,10 @@ export async function fetch_anilist_data(anime_name) {
     const processed_terms = await process_term(anime_name);
     
     if (!processed_terms || processed_terms.length === 0) {
-      throw new Error("Nenhum anime encontrado no AniList.");
+      throw new Error("no processed terms from AniList search");
     }
 
-  logger.debug("📋 Termos processados:", processed_terms);
+  logger.debug("📋 Processed terms:", processed_terms);
 
     for (const term of processed_terms) {
       try {
@@ -180,18 +180,18 @@ export async function fetch_anilist_data(anime_name) {
 
         await sleep(500); // anilist delay is smaller than jikan
         } catch (error) {
-        logger.error(`❌ Erro ao buscar "${term}" no AniList:`, error);
+        logger.error(`❌ Error fetching "${term}" from AniList:`, error);
       }
     }
 
     if (results.length === 0) {
-      throw new Error("Nenhum anime correspondente encontrado no AniList.");
+      throw new Error("No matching anime found on AniList.");
     }
 
     return results;
 
     } catch (error) {
-    logger.error("❌ error in AniList search:", error);
+    logger.error("❌ Error in AniList search:", error);
     throw error;
   }
 }

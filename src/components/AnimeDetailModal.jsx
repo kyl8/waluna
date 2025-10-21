@@ -67,7 +67,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
       setAnimeDetails(anime);
 
       try {
-        logger.debug('📦 Carregando episódios do anime:', anime.title || anime.title_english || anime.name || anime.titles?.[0]?.title);
+        logger.debug('📦 Loading anime episodes:', anime.title || anime.title_english || anime.name || anime.titles?.[0]?.title);
 
         // tries to use anilist_id when possible
         let anilistId = anime.anilist_id || anime.id || null;
@@ -83,14 +83,14 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
 
         if (results.length > 0 && results[0].data.episodeList) {
           const episodeData = results[0].data;
-          logger.info('✅ Episódios carregados:', episodeData.episodeList.length);
+          logger.info('✅ Loading episodes:', episodeData.episodeList.length);
           setEpisodes(episodeData.episodeList);
         } else {
-          logger.warn('⚠️ Nenhum episódio encontrado no AniZip');
+          logger.warn('⚠️ No episodes found on AniZip');
           setEpisodes([]);
         }
       } catch (err) {
-        logger.error('❌ Erro ao carregar episódios:', err);
+        logger.error('❌ Error loading episodes:', err);
         setEpisodes([]);
       } finally {
         setLoading(false);
@@ -148,11 +148,11 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
   const displayData = animeDetails || anime; 
   const memoizedHelpers = React.useMemo(() => ({
     getTitle: () => {
-      if (!displayData) return 'Título não disponível';
+      if (!displayData) return 'Title not available';
       if (displayData.titles) {
         return displayData.titles.find(t => t.type === 'Default')?.title || displayData.title;
       }
-      return displayData.title || 'Título não disponível';
+      return displayData.title || 'Title not available';
     },
     getImage: () => {
       if (!displayData) return '';
@@ -362,7 +362,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
                     <VStack align="stretch" spacing={6}>
                       {/* Sinopse */}
                       <Box>
-                        <Text fontSize="xl" fontWeight="bold" mb={3}>synopsis</Text>
+                        <Text fontSize="xl" fontWeight="bold" mb={3}>Sinopse</Text>
                         <Text fontSize="sm" color="gray.300" lineHeight="tall">
                           {displayData.synopsis || 'No synopsis available.'}
                         </Text>
@@ -397,6 +397,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
                                         visibleCount={visibleCount}
                                         onLoadMore={handleLoadMore}
                                         EpisodeRow={EpisodeRow}
+                                        animeName={getTitle()}
                                       />
                                     );
                                   }
@@ -414,6 +415,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
                                           visibleCount={visibleCount}
                                           onLoadMore={handleLoadMore}
                                           EpisodeRow={EpisodeRow}
+                                          animeName={getTitle()}
                                         />
                                       }
                                     >
@@ -438,6 +440,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
                                   visibleCount={visibleCount}
                                   onLoadMore={handleLoadMore}
                                   EpisodeRow={EpisodeRow}
+                                  animeName={getTitle()}
                                 />
                               )
                             ) : !loading && episodes.length === 0 ? (

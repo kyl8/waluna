@@ -47,7 +47,7 @@ function VirtualListInner({ items = [], rowHeight = 112, height = 400, width = '
     return copy;
   }, [items, showSort, sortKey, sortMode]);
 
-  // se tiver react-window, usa
+  // if react-window is available, use it
   if (FixedSizeListComp) {
     const Comp = FixedSizeListComp;
     return (

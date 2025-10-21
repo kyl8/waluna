@@ -1,4 +1,3 @@
-// src/components/SearchModal.jsx
 import React from 'react';
 import { Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, VStack, Text, Spinner, Center } from '@chakra-ui/react';
 import SearchResultItem from './SearchResultItem';

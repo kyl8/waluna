@@ -7,6 +7,7 @@
         "@chakra-ui/react": "^2.10.9",
         "@emotion/react": "^11.14.0",
         "@emotion/styled": "^11.14.1",
+        "@lowlighter/rakun": "^1.0.7",
         "artplayer": "^5.3.0",
         "classnames": "^2.3.2",
         "framer-motion": "^10.12.16",
@@ -161,6 +162,8 @@
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
+
+    "@lowlighter/rakun": ["@lowlighter/rakun@1.0.7", "", {}, "sha512-MjnVjaqOUNv1LQzJpcAWamP7TF5zTwd/DLgy1p5PHRV0O/nOdwmiWN4Y8D6u73NWyySu/fNF0B5PiN6Aj3P/tA=="],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.0.6", "", { "dependencies": { "@emnapi/core": "^1.5.0", "@emnapi/runtime": "^1.5.0", "@tybys/wasm-util": "^0.10.1" } }, "sha512-DXj75ewm11LIWUk198QSKUTxjyRjsBwk09MuMk5DGK+GDUtyPhhEHOGP/Xwwj3DjQXXkivoBirmOnKrLfc0+9g=="],
 
