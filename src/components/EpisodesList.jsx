@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { VStack, Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, HStack, Tooltip, Text, Spinner, Modal, ModalOverlay, ModalContent, ModalCloseButton } from '@chakra-ui/react';
+import { VStack, Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, HStack, Tooltip, Text, Spinner } from '@chakra-ui/react';
 import { Global } from '@emotion/react';
 import { FaDownload, FaMagnet, FaSeedling, FaArrowDown, FaChevronUp, FaPlay } from 'react-icons/fa';
 import { filterTorrents } from '../utils/helpers/rakun.js';
+import { startFullPipeline } from '../utils/api/waluna.js';
 import VideoPlayer from './VideoPlayer';
 
-const TorrentTable = ({ episodeId, onClose, animeName, episodeNumber, seasonNumber }) => {
+const TorrentTable = ({ episodeId, onClose, animeName, episodeNumber, seasonNumber, onPlayTorrent }) => {
   const [torrents, setTorrents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [playing, setPlaying] = useState(null);
 
   useEffect(() => {
     const fetchTorrents = async () => {
@@ -161,8 +163,26 @@ const TorrentTable = ({ episodeId, onClose, animeName, episodeNumber, seasonNumb
                       <HStack spacing={1} justify="center">
                         <Tooltip label="Reproduzir">
                           <Button 
-                            as="a" 
-                            href={torrent.torrent_info?.magnet_link} 
+                            onClick={async () => {
+                              setPlaying(torrent.hash);
+                              try {
+                                console.log('[TorrentTable] Starting pipeline with magnet:', torrent.torrent_info?.magnet_link);
+                                const result = await startFullPipeline(torrent.torrent_info?.magnet_link);
+                                console.log('[TorrentTable] Pipeline started:', result);
+                                onPlayTorrent({
+                                  ...torrent,
+                                  downloadId: result.downloadId,
+                                  hlsId: result.hlsId,
+                                  playlistURL: result.playlistURL,
+                                });
+                                onClose();
+                              } catch (error) {
+                                console.error('[TorrentTable] Pipeline error:', error);
+                                setPlaying(null);
+                              }
+                            }}
+                            isLoading={playing === torrent.hash}
+                            loadingText="Iniciando..."
                             size="xs" 
                             colorScheme="purple"
                             bg="purple.600"
@@ -232,12 +252,12 @@ const TorrentTable = ({ episodeId, onClose, animeName, episodeNumber, seasonNumb
 const EpisodesList = ({ 
   episodes, 
   EpisodeRow,
-  animeName
+  animeName,
+  onPlayTorrent,
+  onCloseAllModals
 }) => {
   const [visibleCount, setVisibleCount] = useState(25);
   const [expandedEpisodeId, setExpandedEpisodeId] = useState(null);
-  const [isPlayerOpen, setIsPlayerOpen] = useState(false);
-  const [playingTorrent, setPlayingTorrent] = useState(null);
   const observerTarget = useRef(null);
   const isLoadingRef = useRef(false);
   const debounceRef = useRef(null);
@@ -302,10 +322,22 @@ const EpisodesList = ({
     setExpandedEpisodeId(prev => prev === epUid ? null : epUid);
   }, []);
 
-  const handleClosePlayer = useCallback(() => {
-    setIsPlayerOpen(false);
-    setPlayingTorrent(null);
-  }, []);
+  const handlePlayTorrentClick = useCallback((torrent) => {
+    console.log(`[EpisodesList] Playing torrent:`, torrent.filename);
+    console.log(`[EpisodesList] Closing all modals`);
+    
+    // Fechar todos os modais anteriores PRIMEIRO
+    if (onCloseAllModals) {
+      console.log('[EpisodesList] Calling onCloseAllModals');
+      onCloseAllModals();
+    }
+    
+    // Depois enviar torrent para o player
+    if (onPlayTorrent) {
+      console.log('[EpisodesList] Calling onPlayTorrent');
+      onPlayTorrent(torrent);
+    }
+  }, [onPlayTorrent, onCloseAllModals]);
 
   return (
     <>
@@ -352,6 +384,7 @@ const EpisodesList = ({
                 seasonNumber={ep.seasonNumber || ep.season || 1}
                 episodeNumber={ep.episodeNumber || ep.number || ep.absoluteNumber}
                 onClose={() => setExpandedEpisodeId(null)}
+                onPlayTorrent={(torrent) => handlePlayTorrentClick(torrent)}
               />
             )}
           </Box>
@@ -369,87 +402,6 @@ const EpisodesList = ({
           />
         </Box>
       )}
-
-      {/* Player Modal */}
-      <Modal isOpen={isPlayerOpen} onClose={handleClosePlayer} size="6xl">
-        <ModalOverlay bg="blackAlpha.900" zIndex={1500} />
-        <ModalContent bg="transparent" boxShadow="none">
-          <ModalCloseButton color="white" zIndex={1501} />
-          <VStack p={4} spacing={4} align="stretch">
-            {playingTorrent && (
-              <HStack spacing={4} align="flex-start">
-                {/* VideoPlayer */}
-                <Box flex={1}>
-                  <VideoPlayer 
-                    torrentHash={playingTorrent.hash}
-                    posterUrl=""
-                  />
-                </Box>
-                
-                {/* Detalhes do Torrent */}
-                <Box 
-                  w="280px" 
-                  bg="#2d2d2d" 
-                  p={4} 
-                  borderRadius="lg"
-                  maxH="600px"
-                  overflowY="auto"
-                >
-                  <VStack align="stretch" spacing={3}>
-                    <Box>
-                      <Text fontSize="xs" color="gray.400" mb={1}>Nome</Text>
-                      <Text fontSize="sm" fontWeight="semibold" noOfLines={3} title={playingTorrent.filename}>
-                        {playingTorrent.filename}
-                      </Text>
-                    </Box>
-
-                    <Box>
-                      <Text fontSize="xs" color="gray.400" mb={1}>Qualidade</Text>
-                      <Badge colorScheme="purple" fontSize="xs">
-                        {playingTorrent.quality || 'N/A'}
-                      </Badge>
-                    </Box>
-
-                    <Box>
-                      <Text fontSize="xs" color="gray.400" mb={1}>Tamanho</Text>
-                      <Text fontSize="sm">
-                        {playingTorrent.torrent_info?.size_value} {playingTorrent.torrent_info?.size_unit}
-                      </Text>
-                    </Box>
-
-                    <Box>
-                      <Text fontSize="xs" color="gray.400" mb={1}>Seeds</Text>
-                      <HStack>
-                        <FaSeedling color="#68d391" size={12} />
-                        <Text fontSize="sm" fontWeight="bold" color="green.400">
-                          {playingTorrent.torrent_info?.seeders || 0}
-                        </Text>
-                      </HStack>
-                    </Box>
-
-                    <Box>
-                      <Text fontSize="xs" color="gray.400" mb={1}>Leechers</Text>
-                      <HStack>
-                        <FaArrowDown color="#f6ad55" size={12} />
-                        <Text fontSize="sm" fontWeight="bold" color="orange.400">
-                          {playingTorrent.torrent_info?.leechers || 0}
-                        </Text>
-                      </HStack>
-                    </Box>
-
-                    <Box>
-                      <Text fontSize="xs" color="gray.400" mb={1}>Hash</Text>
-                      <Text fontSize="8px" color="gray.500" noOfLines={2} fontFamily="monospace">
-                        {playingTorrent.hash}
-                      </Text>
-                    </Box>
-                  </VStack>
-                </Box>
-              </HStack>
-            )}
-          </VStack>
-        </ModalContent>
-      </Modal>
     </>
   );
 };

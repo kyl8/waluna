@@ -9,7 +9,6 @@ body {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  /* so transições baratas */
   * {
     transition-property: background-color, border-color, opacity, color;
     transition-duration: 100ms;
@@ -17,7 +16,6 @@ body {
   }
 }
 
-/* otimiza scrolling */
 .scroll-container {
   contain: layout style paint;
   will-change: scroll-position;

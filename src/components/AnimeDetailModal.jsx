@@ -49,7 +49,7 @@ class ListErrorBoundary extends React.Component {
   }
 }
 
-const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
+const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorrent }) => {
   const shouldReduceMotion = usePrefersReducedMotion();
   const [animeDetails, setAnimeDetails] = useState(null);
   const [episodes, setEpisodes] = useState([]);
@@ -416,6 +416,8 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
                                           onLoadMore={handleLoadMore}
                                           EpisodeRow={EpisodeRow}
                                           animeName={getTitle()}
+                                          onCloseAllModals={onCloseAllModals}
+                                          onPlayTorrent={onPlayTorrent}
                                         />
                                       }
                                     >
@@ -441,6 +443,8 @@ const AnimeDetailModal = ({ isOpen, onClose, anime }) => {
                                   onLoadMore={handleLoadMore}
                                   EpisodeRow={EpisodeRow}
                                   animeName={getTitle()}
+                                  onCloseAllModals={onCloseAllModals}
+                                  onPlayTorrent={onPlayTorrent}
                                 />
                               )
                             ) : !loading && episodes.length === 0 ? (

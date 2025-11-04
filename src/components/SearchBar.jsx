@@ -1,4 +1,3 @@
-// search input component
 import React from 'react';
 import { Input, InputGroup, InputLeftElement, Box } from '@chakra-ui/react';
 import { FaSearch } from 'react-icons/fa';

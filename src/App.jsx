@@ -9,15 +9,24 @@ import PlayerControls from './components/PlayerControls';
 
 function App() {
   const [isFavorited, setIsFavorited] = useState(false);
+  const [playingTorrentHash, setPlayingTorrentHash] = useState(null);
 
   const user = { name: 'kyl', photoUrl: 'https://i.pinimg.com/736x/a9/bc/64/a9bc64837740124cd0ffeeef4c8de068.jpg' };
-  const videoUrl = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
   const posterUrl = 'https://www.artplayer.cn/assets/sample/poster.jpg';
 
   const isDesktopLayout = useBreakpointValue({ base: false, lg: true }) ?? false;
 
   const handleFavoriteToggle = useCallback(() => {
     setIsFavorited(prev => !prev);
+  }, []);
+
+  const handleCloseAllModals = useCallback(() => {
+    console.log('[App] Closing all modals');
+  }, []);
+
+  const handlePlayTorrent = useCallback((torrent) => {
+    console.log('[App] Playing torrent:', torrent.filename);
+    setPlayingTorrentHash(torrent.hlsId || torrent.downloadId);
   }, []);
   
   return (
@@ -60,11 +69,18 @@ function App() {
           }}
         >
           <Box mb={{ base: 6, md: 8 }} w="100%">
-            <SearchContainer />
+            <SearchContainer 
+              onCloseAllModals={handleCloseAllModals}
+              onPlayTorrent={handlePlayTorrent}
+            />
           </Box>
 
           <Box mb={{ base: 6, md: 8 }} w="100%">
-            <VideoPlayer videoUrl={videoUrl} posterUrl={posterUrl} />
+            <VideoPlayer 
+              videoUrl="" 
+              posterUrl={posterUrl} 
+              torrentHash={playingTorrentHash}
+            />
           </Box>
 
           <Box mb={{ base: 6, md: 8 }} w="100%">

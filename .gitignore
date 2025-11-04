@@ -15,6 +15,11 @@ coverage/
 .esbuild/
 out/
 *.tgz
+/target
+
+# Server-specific build outputs and generated files
+/server/target
+/server/dashboard.html
 
 # Vite / Rollup / caches
 .vite/

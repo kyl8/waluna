@@ -1,250 +1,426 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { Box, Button, HStack, Input, VStack, Text } from '@chakra-ui/react';
+import { Box, VStack, Text } from '@chakra-ui/react';
 import Artplayer from 'artplayer';
 import Hls from 'hls.js';
 import { motion } from 'framer-motion';
+
 const MotionBox = motion(Box);
 
 const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
-  const artRef = useRef(null);
-  const [testMode, setTestMode] = useState(true);
-  const [testHash, setTestHash] = useState('f7826e06601961c1a178e34fa72507d1e3bd28f1');
-  const [currentUrl, setCurrentUrl] = useState('');
-  const savedTimeRef = useRef(0);
-  const isReloadingRef = useRef(false);
-  const artInstanceRef = useRef(null);
+	const artRef = useRef(null);
+	const [currentUrl, setCurrentUrl] = useState('');
+	const artInstanceRef = useRef(null);
+	const statusPollRef = useRef(null);
+	const [durationSeconds, setDurationSeconds] = useState(null);
+	const [displayTotal, setDisplayTotal] = useState('00:00');
+	const [displayCurrent, setDisplayCurrent] = useState('00:00');
+	const currentDurationRef = useRef(null);
+	const creatingRef = useRef(false);
+	const hlsRef = useRef(null); 
+	const playbackMonitorRef = useRef(null); 
+	const playbackStuckAttemptsRef = useRef(0); 
+	const durationInjectedRef = useRef(false);
+	const initialSkipAttemptRef = useRef(0); 
 
-  const playHls = useCallback((video, url) => {
-    console.log('[playHls] Loading HLS URL:', url);
-    if (Hls.isSupported()) {
-      console.log('[playHls] Hls.js is supported');
-      const hls = new Hls({
-        debug: false,
-        enableWorker: true,
-        lowLatencyMode: false,
-        maxBufferLength: 15,
-        maxMaxBufferLength: 40,
-        maxBufferSize: 50 * 1000 * 1000,
-        backBufferLength: 10,
-        maxFragLookUpTolerance: 1.5,
-        fragLoadingMaxRetry: 100,
-        fragLoadingTimeOut: 15000,
-        manifestLoadingMaxRetry: 100,
-        manifestLoadingTimeOut: 45000,
-        testBitrates: false,
-        stopBufferingOnPause: false,
-        startFragPrefetching: true,
-        minBufferLength: 1,
-        minBufferLengthCapping: 3,
-        maxStarvationDelay: 4,
-        lowBufferWatchdogPeriod: 1,
-        highBufferWatchdogPeriod: 5,
-      });
-      
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        console.log('[Hls.js Error]', data.details, data.error?.message);
-        if (!data.fatal) {
-          console.log('[Hls.js] Non-fatal error, continuing...');
-          return;
-        }
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log('[Hls.js] Network error, attempting to recover');
-              setTimeout(() => hls.startLoad(), 3000);
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log('[Hls.js] Media error, attempting to recover');
-              hls.recoverMediaError();
-              break;
-          }
-        }
-      });
-      
-      hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-        console.log('[Hls.js] Manifest parsed successfully');
-      });
+	const lastPolledDurationRef = useRef(null);
+	const pollStableCountRef = useRef(0);
+	
+	const injectDurationToVideo = (video, duration) => {
+		if (!video || !duration || typeof duration !== 'number' || duration <= 0) return;
+		try {
+			// evita redefinir se já injetado com o mesmo valor
+			if (durationInjectedRef.current === duration) return;
 
-      hls.on(Hls.Events.FRAG_LOADING, (event, data) => {
-        console.log('[Hls.js] Loading fragment:', data.frag.sn);
-      });
+			Object.defineProperty(video, 'duration', {
+				get: () => duration,
+				configurable: true,
+			});
 
-      hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
-        console.log('[Hls.js] Fragment loaded:', data.frag.sn);
-      });
+			durationInjectedRef.current = duration;
+		} catch (e) {
+			console.warn('Could not inject duration getter:', e.message);
+		}
+	};
 
-      hls.on(Hls.Events.FRAG_LOAD_ERROR, (event, data) => {
-        console.log('[Hls.js] Fragment load error:', data.frag.sn);
-        if (video && !isReloadingRef.current) {
-          isReloadingRef.current = true;
-          savedTimeRef.current = video.currentTime || 0;
-          console.log('[Hls.js] Saving position:', savedTimeRef.current, 'and reloading playlist');
-          setTimeout(() => {
-            hls.loadSource(url);
-            isReloadingRef.current = false;
-          }, 1000);
-        }
-      });
-      
-      hls.loadSource(url);
-      hls.attachMedia(video);
-      video._hlsInstance = hls;
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      console.log('[playHls] Using native HLS support');
-      video.src = url;
-    } else {
-      console.error('[playHls] HLS not supported');
-    }
-  }, []);
+	const poster = 'https://i.pinimg.com/1200x/06/24/76/06247693547f1ae58fd4ddf1c94869ba.jpg';
 
-  useEffect(() => {
-    const hashToUse = testMode ? testHash : torrentHash;
-    const hlsUrl = testMode 
-      ? `http://127.0.0.1:8080/hls/playlist/${testHash}`
-      : (hashToUse ? `http://127.0.0.1:8080/hls/playlist/${hashToUse}` : videoUrl);
+	// helper: format seconds -> mm:ss or h:mm:ss
+	const formatTime = (secs) => {
+		if (!isFinite(secs) || secs <= 0) return '00:00';
+		const h = Math.floor(secs / 3600);
+		const m = Math.floor((secs % 3600) / 60);
+		const s = Math.floor(secs % 60);
+		if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+		return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+	};
 
-    setCurrentUrl(hlsUrl);
-    console.log('[VideoPlayer] Loading:', { torrentHash, testHash, testMode, hlsUrl });
+	// poller
+	const startStatusPolling = useCallback((hlsId) => {
+		if (statusPollRef.current) clearInterval(statusPollRef.current);
+		const statusUrl = `http://127.0.0.1:8080/hls/status/${hlsId}`;
+		console.log('[Status] Polling:', statusUrl);
 
-    if (!artRef.current) {
-      console.error('[VideoPlayer] artRef.current is null');
-      return;
-    }
+		const poll = async () => {
+			try {
+				const response = await fetch(statusUrl, { cache: 'no-store' });
+				if (!response.ok) return;
 
-    if (artInstanceRef.current && artInstanceRef.current.destroy) {
-      try {
-        artInstanceRef.current.destroy(false);
-      } catch (e) {
-        console.error('[VideoPlayer] Error destroying previous instance:', e);
-      }
-      artInstanceRef.current = null;
-    }
+				const data = await response.json();
+				const totalSeconds = data.duration || 0;
 
-    const art = new Artplayer({
-      container: artRef.current,
-      url: hlsUrl,
-      type: 'm3u8',
-      poster: posterUrl,
-      theme: '#9F7AEA',
-      customType: { 
-        m3u8: playHls
-      },
-      volume: 0.5,
-      isLive: false,
-      muted: false,
-      autoplay: false,
-      pip: true,
-      autoSize: true,
-      autoMini: true,
-      loop: false,
-      flip: true,
-      playbackRate: true,
-      aspectRatio: true,
-      fullscreen: true,
-      fullscreenWeb: true,
-      setting: true,
-      miniProgressBar: true,
-      playsInline: true,
-    });
+				if (typeof totalSeconds === 'number' && totalSeconds > 0) {
+					// atualizar referência sempre
+					const prev = lastPolledDurationRef.current;
+					if (prev !== null && Math.abs(prev - totalSeconds) < 0.001) {
+						// mesmo valor consecutivo
+						pollStableCountRef.current = (pollStableCountRef.current || 0) + 1;
+					} else {
+						// novo valor visto -> reset contador
+						lastPolledDurationRef.current = totalSeconds;
+						pollStableCountRef.current = 1;
+					}
 
-    art.on('ready', () => {
-      console.log('[VideoPlayer] Player ready');
-      if (savedTimeRef.current > 0) {
-        console.log('[VideoPlayer] Restoring to:', savedTimeRef.current);
-        art.currentTime = savedTimeRef.current;
-        savedTimeRef.current = 0;
-      }
-    });
+					// atualizar estado/label imediatamente (sem injetar)
+					if (Math.abs((currentDurationRef.current || 0) - totalSeconds) > 1) {
+						currentDurationRef.current = totalSeconds;
+						setDurationSeconds(totalSeconds);
+						setDisplayTotal(formatTime(totalSeconds));
+					}
 
-    art.on('canplay', () => {
-      console.log('[VideoPlayer] Can play');
-      if (savedTimeRef.current > 0 && !isReloadingRef.current) {
-        console.log('[VideoPlayer] Restoring to:', savedTimeRef.current);
-        art.currentTime = savedTimeRef.current;
-        savedTimeRef.current = 0;
-      }
-    });
+					if (pollStableCountRef.current >= 2) {
+						injectDurationToVideo(artInstanceRef.current?.video, totalSeconds);
+					}
+				}
+			} catch (error) {
+				console.warn('[Status] Polling error:', error.message);
+			}
+		};
 
-    art.on('ended', () => {
-      console.log('[VideoPlayer] Video finished');
-      art.pause();
-    });
+		// reset counters ao iniciar poll
+		lastPolledDurationRef.current = null;
+		pollStableCountRef.current = 0;
 
-    art.on('seek', () => {
-      const currentTime = art.currentTime;
-      const duration = art.duration;
-      console.log(`[VideoPlayer] Seek to: ${currentTime.toFixed(2)}s / ${duration.toFixed(2)}s`);
-    });
+		poll();
+		statusPollRef.current = setInterval(poll, 10000); // 10s
+	}, []);
 
-    artInstanceRef.current = art;
+	const waitForHlsReady = useCallback(async (id, { timeout = 60000, interval = 1000 } = {}) => {
+		if (!id) return false;
 
-    return () => {
-      if (artInstanceRef.current && artInstanceRef.current.destroy) {
-        try {
-          if (artInstanceRef.current.video && artInstanceRef.current.video._hlsInstance) {
-            artInstanceRef.current.video._hlsInstance.destroy();
-            artInstanceRef.current.video._hlsInstance = null;
-          }
-          artInstanceRef.current.destroy(false);
-        } catch (e) {
-          console.error('[VideoPlayer] Error destroying instance on cleanup:', e);
-        }
-        artInstanceRef.current = null;
-      }
-    };
-  }, [videoUrl, posterUrl, torrentHash, testHash, testMode, playHls]);
+		const checkEndpoint = async (url) => {
+			try {
+				const resp = await fetch(url, { cache: 'no-store' });
+				if (!resp.ok) return 0;
 
-  return (
-    <VStack spacing={4} w="100%">
-      <HStack spacing={2} w="100%" bg="#2d2d2d" p={3} borderRadius="md" flexWrap="wrap">
-        <Text fontSize="sm" fontWeight="bold" whiteSpace="nowrap">🧪 TEST:</Text>
-        <Input 
-          value={testHash}
-          onChange={(e) => setTestHash(e.target.value)}
-          placeholder="Enter hash to test"
-          size="sm"
-          bg="#1a1a1a"
-          color="gray.300"
-          isDisabled={!testMode}
-          w="200px"
-        />
-        <Button 
-          size="sm" 
-          colorScheme={testMode ? "purple" : "gray"} 
-          onClick={() => setTestMode(!testMode)}
-          whiteSpace="nowrap"
-        >
-          {testMode ? 'ON' : 'OFF'}
-        </Button>
-        <Text fontSize="xs" color="gray.400" noOfLines={1} maxW="300px">
-          {currentUrl}
-        </Text>
-      </HStack>
-      
-      <MotionBox
-        ref={artRef}
-        className="gpu-accelerate"
-        width={{ base: '90%', md: '70%', lg: '50%', xl: '45%' }}
-        maxW="900px"
-        mx="auto"
-        initial={{ opacity: 0, scale: 0.995, y: 6 }}
-        animate={{ opacity: 1, scale: 1, y: 0, transition: { type: 'spring', stiffness: 120, damping: 16 } }}
-        sx={{
-          aspectRatio: '16 / 9',
-          margin: '0 auto',
-          borderRadius: '1rem',
-          overflow: 'hidden',
-          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.4)',
-          position: 'relative',
-          zIndex: 0,
-        }}
-      />
-    </VStack>
-  );
+				if (url.includes('/status/')) {
+					const data = await resp.json();
+					if (typeof data.duration === 'number' && data.duration > 0) {
+						currentDurationRef.current = data.duration;
+						setDurationSeconds(data.duration);
+					}
+					return data.segments_count || 0;
+				} else {
+					const text = await resp.text();
+					return (text.match(/#EXTINF:/g) || []).length;
+				}
+			} catch (e) {
+				return 0;
+			}
+		};
+
+		const start = Date.now();
+		while (Date.now() - start < timeout) {
+			const statusUrl = `http://127.0.0.1:8080/hls/status/${id}`;
+			const count = await checkEndpoint(statusUrl);
+			if (count > 0) {
+				console.log('[HLS Ready] status indicates', count, 'segments');
+				return true;
+			}
+
+			const playlistUrl = `http://127.0.0.1:8080/hls/playlist/${id}`;
+			const plCount = await checkEndpoint(playlistUrl);
+			if (plCount > 0) {
+				console.log('[HLS Ready] playlist contains', plCount, 'segments');
+				return true;
+			}
+
+			await new Promise(r => setTimeout(r, interval));
+		}
+
+		console.warn('[HLS Ready] timeout reached');
+		return false;
+	}, []);
+
+	useEffect(() => {
+		const destroyPlayer = () => {
+			try { if (playbackMonitorRef.current) { clearTimeout(playbackMonitorRef.current); playbackMonitorRef.current = null; } } catch(_) {}
+			if (artInstanceRef.current?.destroy) {
+				try {
+					artInstanceRef.current.destroy(false);
+				} catch (e) {
+					console.error('[Player] Destroy error:', e.message);
+				}
+			}
+			try { if (hlsRef.current) { try { hlsRef.current.destroy(); } catch(_) {} hlsRef.current = null; } } catch(_) {}
+			durationInjectedRef.current = false;
+			creatingRef.current = false;
+			artInstanceRef.current = null;
+			playbackStuckAttemptsRef.current = 0;
+			initialSkipAttemptRef.current = 0;
+		};
+
+		const hashToUse = torrentHash;
+		const hlsUrl = hashToUse ? `http://127.0.0.1:8080/hls/playlist/${hashToUse}` : videoUrl;
+		setCurrentUrl(hlsUrl);
+		setDurationSeconds(null);
+		currentDurationRef.current = null;
+		destroyPlayer();
+		setTimeout(() => {
+			if (!artRef.current) {
+				console.error('[Player] Container not found');
+				return;
+			}
+			// evitar criar se já estiver criando/instanciado
+			if (creatingRef.current || artInstanceRef.current) return;
+			createPlayer();
+		}, 0);
+
+		const createPlayer = async () => {
+			if (creatingRef.current) return;
+			creatingRef.current = true;
+			destroyPlayer();
+
+			if (hashToUse) {
+				const ready = await waitForHlsReady(hashToUse, { timeout: 60000, interval: 1000 });
+				if (!ready) console.warn('[Player] HLS ready timeout');
+			}
+
+			try {
+				let hlsInstance = null;
+				let playInitiated = false;
+
+				const art = new Artplayer({
+					container: artRef.current,
+					url: hlsUrl,
+					type: 'm3u8',
+					poster: posterUrl || poster,
+					theme: '#9F7AEA',
+					volume: 0.5,
+					isLive: false,
+					autoplay: false,
+					pip: true,
+					autoSize: true,
+					autoMini: true,
+					playbackRate: true,
+					aspectRatio: true,
+					fullscreen: true,
+					fullscreenWeb: true,
+					setting: true,
+					miniProgressBar: true,
+					playsInline: true,
+					muted: false,
+					contextMenu: true,
+					customType: {
+						m3u8: (video, url) => {
+							if (Hls.isSupported()) {
+								const known = currentDurationRef.current || durationSeconds;
+								if (known && known > 0) {
+									injectDurationToVideo(video, known);
+								}
+
+								const hls = new Hls({
+									debug: false,
+									enableWorker: true,
+									lowLatencyMode: false,
+									maxBufferLength: 600,       
+									maxMaxBufferLength: 1200,
+									backBufferLength: 300,
+									manifestLoadingTimeOut: 20000,
+									manifestLoadingMaxRetry: 6,
+								});
+
+								hlsInstance = hls;
+								hlsRef.current = hls;
+								hls.on(Hls.Events.MANIFEST_PARSED, () => {
+									if (playInitiated) return;
+									playInitiated = true;
+									// tentativa inicial de pular pequeno offset para evitar ponto problemático em 0s
+									try {
+										if ((video.currentTime || 0) < 0.05 && initialSkipAttemptRef.current === 0) {
+											initialSkipAttemptRef.current = 1;
+											const target = Math.min(1, (currentDurationRef.current && currentDurationRef.current > 2) ? 1 : 0.5);
+											try { video.currentTime = target; } catch (e) {}
+										}
+									} catch (_) {}
+
+									video.play().catch(() => {});
+									if (playbackMonitorRef.current) clearTimeout(playbackMonitorRef.current);
+									playbackMonitorRef.current = setTimeout(() => {
+										try {
+											const cur = video.currentTime || 0;
+											if (cur < 0.1 && playbackStuckAttemptsRef.current < 2) {
+												playbackStuckAttemptsRef.current += 1;
+												try { hlsRef.current?.startLoad(); } catch (_) {}
+												try { video.muted = true; } catch (_) {}
+												try { video.currentTime = Math.min(1, (currentDurationRef.current && currentDurationRef.current > 2) ? 1 : 0.5); } catch (_) {}
+												setTimeout(() => {
+													video.play().catch(() => {});
+													setTimeout(() => { try { video.muted = false; } catch (_) {} }, 500);
+												}, 250);
+											}
+										} catch (e) {}
+										playbackMonitorRef.current = null;
+									}, 700);
+								});
+ 								let metadataLoaded = false;
+ 								const onLoadedMeta = async () => {
+ 									if (metadataLoaded) return;
+ 									metadataLoaded = true;
+ 									try {
+ 										if (hashToUse) {
+ 											const statusUrl = `http://127.0.0.1:8080/hls/status/${hashToUse}`;
+ 											const resp = await fetch(statusUrl, { cache: 'no-store' });
+ 											if (resp.ok) {
+ 												const data = await resp.json();
+ 												if (typeof data.duration === 'number' && data.duration > 0) {
+ 													currentDurationRef.current = data.duration;
+ 													setDurationSeconds(data.duration);
+ 													setDisplayTotal(formatTime(data.duration));
+ 												}
+ 											}
+ 										}
+ 									} catch (e) {
+ 										console.warn('status fetch failed:', e.message);
+ 									}
+ 									if (!currentDurationRef.current || currentDurationRef.current <= 0) {
+ 										if (currentDurationRef.current && currentDurationRef.current > 0) {
+ 											setDurationSeconds(currentDurationRef.current);
+ 											setDisplayTotal(formatTime(currentDurationRef.current));
+ 										} else if (video.duration && video.duration > 0) {
+ 											currentDurationRef.current = video.duration;
+ 											setDurationSeconds(video.duration);
+ 											setDisplayTotal(formatTime(video.duration));
+ 										}
+ 									}
+ 									setDisplayCurrent(formatTime(0));
+ 								};
+ 								video.addEventListener('loadedmetadata', onLoadedMeta);
+ 								const onTimeUpdate = () => {
+ 									try {
+ 										const t = video.currentTime || 0;
+ 										setDisplayCurrent(formatTime(t));
+ 									} catch (e) {}
+ 								};
+ 								video.addEventListener('timeupdate', onTimeUpdate);
+ 
+ 								// cleanup específico do video/hls
+ 								video.addEventListener('destroy', () => {
+ 									try { video.removeEventListener('loadedmetadata', onLoadedMeta); } catch(e) {}
+ 									try { video.removeEventListener('timeupdate', onTimeUpdate); } catch(e) {}
+ 									try { if (playbackMonitorRef.current) { clearTimeout(playbackMonitorRef.current); playbackMonitorRef.current = null; } } catch(_) {}
+ 									try { hls.destroy(); } catch(e) {}
+ 									hlsRef.current = null;
+ 								});
+ 
+ 								hls.loadSource(url);
+ 								hls.attachMedia(video);
+ 							} else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+ 								video.src = url;
+ 							}
+ 						},
+ 					},
+ 				});
+ 				if (art.video && currentDurationRef.current && currentDurationRef.current > 0) {
+ 					try {
+ 						injectDurationToVideo(art.video, currentDurationRef.current);
+ 						setDisplayTotal(formatTime(currentDurationRef.current));
+ 						setDurationSeconds(currentDurationRef.current);
+ 					} catch (e) {
+ 						console.warn('Early injection failed:', e.message);
+ 					}
+ 				}
+				art.on('ready', () => {
+					try {
+						art.seek = 0;
+					} catch (e) { /* silent */ }
+					if (hashToUse) startStatusPolling(hashToUse);
+					if (currentDurationRef.current) setDisplayTotal(formatTime(currentDurationRef.current));
+					setDisplayCurrent(formatTime(0));
+				});
+
+				if (art.video) {
+					const fallbackOnTime = () => setDisplayCurrent(formatTime(art.video.currentTime || 0));
+					art.video.addEventListener('timeupdate', fallbackOnTime);
+				}
+
+				artInstanceRef.current = art;
+				creatingRef.current = false;
+			} catch (err) {
+				creatingRef.current = false;
+				console.error('[Player] Create error:', err.message);
+			}
+		};
+		return () => {
+			if (statusPollRef.current) {
+				clearInterval(statusPollRef.current);
+				statusPollRef.current = null;
+			}
+			destroyPlayer();
+		};
+	}, [videoUrl, posterUrl, torrentHash, startStatusPolling, waitForHlsReady]);
+
+	useEffect(() => {
+		if (durationSeconds) {
+			setDisplayTotal(formatTime(durationSeconds));
+		}
+	}, [durationSeconds]);
+
+	return (
+		<VStack spacing={4} w="100%">
+			<Text fontSize="xs" color="gray.400" noOfLines={1} maxW="100%">
+				{currentUrl}
+			</Text>
+
+			<MotionBox
+				ref={artRef}
+				width={{ base: '90%', md: '70%', lg: '50%', xl: '45%' }}
+				maxW="900px"
+				mx="auto"
+				initial={{ opacity: 0, scale: 0.995, y: 6 }}
+				animate={{ opacity: 1, scale: 1, y: 0, transition: { type: 'spring', stiffness: 120, damping: 16 } }}
+				sx={{
+					position: 'relative', // permite overlay absoluto
+					aspectRatio: '16 / 9',
+					borderRadius: '1rem',
+					overflow: 'hidden',
+					boxShadow: '0 10px 30px rgba(0, 0, 0, 0.4)',
+				}}
+			>
+				<Box
+					position="absolute"
+					bottom={{ base: '48px', md: '60px' }}
+					left="50%"
+					transform="translateX(-50%)"
+					zIndex={50}
+					pointerEvents="none"
+					color="white"
+					fontFamily="mono"
+					fontSize={{ base: 'sm', md: 'md' }}
+					textShadow="0 2px 8px rgba(0,0,0,0.6)"
+					px={3}
+					py={1}
+					borderRadius="md"
+					bg="rgba(0,0,0,0.18)"
+				>
+					{displayCurrent} / {displayTotal}
+				</Box>
+			</MotionBox>
+		</VStack>
+	);
 };
 
 export default React.memo(VideoPlayer, (prevProps, nextProps) => {
-  return prevProps.videoUrl === nextProps.videoUrl && 
-         prevProps.posterUrl === nextProps.posterUrl &&
-         prevProps.torrentHash === nextProps.torrentHash;
+	return prevProps.videoUrl === nextProps.videoUrl && 
+		prevProps.posterUrl === nextProps.posterUrl &&
+		prevProps.torrentHash === nextProps.torrentHash;
 });

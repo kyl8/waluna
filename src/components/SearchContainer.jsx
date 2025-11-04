@@ -10,11 +10,12 @@ import SearchResultItem from './SearchResultItem';
 import AnimeDetailModal from './AnimeDetailModal'; 
 import { SearchResultSkeleton } from './SkeletonLoading';
 
-const SearchContainer = () => {
+const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isAnimeDetailOpen, setIsAnimeDetailOpen] = useState(false);
   const [selectedAnime, setSelectedAnime] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const deferredResults = useDeferredValue(results);
@@ -136,23 +137,37 @@ const SearchContainer = () => {
     }, 1200);
   }, [bestApi, recheckApis]);
 
-  const handleAnimeClick = useCallback((anime) => {
+  const handleSelectAnime = useCallback((anime) => {
     setSelectedAnime(anime);
-    setIsModalOpen(true);
+    setIsAnimeDetailOpen(true);
   }, []);
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
+  const handleCloseAnimeDetail = useCallback(() => {
+    setIsAnimeDetailOpen(false);
     setSelectedAnime(null);
-  };
+  }, []);
+
+  const handleCloseAllModalsLocal = useCallback(() => {
+    console.log('[SearchContainer] Closing all modals and clearing search');
+    // Limpar a busca
+    setResults([]);
+    setQuery('');
+    setSelectedAnime(null);
+    // Fechar AnimeDetailModal
+    handleCloseAnimeDetail();
+    // Fechar SearchContainer
+    if (onCloseAllModals) {
+      onCloseAllModals();
+    }
+  }, [onCloseAllModals]);
 
   const resultsNodes = useMemo(() => {
     if (!deferredResults || deferredResults.length === 0) return null;
     return deferredResults.map((item, index) => {
       const key = item.anilist_id ? `al-${item.anilist_id}` : `t-${(item.title||'').replace(/\s+/g,'_')}-${index}`;
-      return <SearchResultItem key={key} item={item} onClick={handleAnimeClick} />;
+      return <SearchResultItem key={key} item={item} onClick={handleSelectAnime} />;
     });
-  }, [deferredResults, handleAnimeClick]);
+  }, [deferredResults, handleSelectAnime]);
 
   return (
     <Box position="relative" width="100%" maxWidth="700px" mx="auto" ref={containerRef}>
@@ -161,9 +176,11 @@ const SearchContainer = () => {
 
 
       <AnimeDetailModal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
+        isOpen={isAnimeDetailOpen}
+        onClose={handleCloseAnimeDetail}
         anime={selectedAnime}
+        onCloseAllModals={handleCloseAllModalsLocal}
+        onPlayTorrent={onPlayTorrent}
       />
 
 
