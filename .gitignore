@@ -21,12 +21,9 @@ out/
 /server/target
 /server/dashboard.html
 
-# Dev server ffmpeg binaries
-/server/ffmpeg/bin/
-server/ffmpeg/doc/
-server/ffmpeg/presets/
-server/ffmpeg/LICENSE
-server/ffmpeg/README.txt
+
+# Dev server ffmpeg binaries — ignore the entire folder
+/server/ffmpeg
 
 # Vite / Rollup / caches
 .vite/
