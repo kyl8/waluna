@@ -401,7 +401,7 @@ Retoma uma conversão previamente iniciada (usa `input_file` salvo em `HLSManage
 
 #### GET `/hls/delete/:id`
 
-Remove `./cache/hls/:id`, arquivos correspondentes em `./cache/downloads` que contenham o id no nome e remove a entrada em memória do `HLSManager`.
+Remove `./cache/hls/:id`, arquivos correspondentes em `./cache/downloads` e `./cache/subtitles` que contenham o id no nome e remove a entrada em memória do `HLSManager`.
 
 Exemplo de resposta bem-sucedida:
 ```json
@@ -629,7 +629,7 @@ O servidor escuta por padrão em `127.0.0.1:8080`.
 Observações:
 
 - Certifique-se de que `ffmpeg/bin/ffmpeg(.exe)` e `ffmpeg/bin/ffprobe(.exe)` existam. O projeto procura por `./ffmpeg/bin/ffmpeg` em relação ao diretório de trabalho.
-- O cache HLS é armazenado em `./cache/hls/` e os downloads em `./cache/downloads/`.
+- O cache HLS é armazenado em `./cache/hls/`, os downloads em `./cache/downloads/` e as legendas em `./cache/subtitles/`.
 
 ## Notas de desenvolvimento
 
