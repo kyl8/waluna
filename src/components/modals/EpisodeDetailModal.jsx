@@ -24,9 +24,9 @@ import {
   usePrefersReducedMotion
 } from '@chakra-ui/react';
 import { FaDownload, FaMagnet, FaSeedling, FaArrowDown } from 'react-icons/fa';
-import { MOCK_TORRENTS } from '../constants/mockTorrents.js'; 
+import { MOCK_TORRENTS } from '../../constants/mockTorrents'; 
 import { Global } from '@emotion/react';
-import { getOptimalDuration, subscribeFrameRate, unsubscribeFrameRate } from '../utils/helpers/animation.js';
+import { getOptimalDuration, subscribeFrameRate, unsubscribeFrameRate } from '../../utils/helpers/animation.js';
 
 const TorrentRow = React.memo(({ torrent, getHealthColor, formatNumber, handleDownload, handleMagnet, shouldReduceMotion }) => {
   const healthColor = getHealthColor(torrent.seeds, torrent.leechers);

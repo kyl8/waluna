@@ -3370,6 +3370,7 @@ dependencies = [
  "anyhow",
  "axum",
  "chrono",
+ "futures",
  "librqbit",
  "nyaa-si",
  "reqwest 0.11.27",
@@ -3380,6 +3381,7 @@ dependencies = [
  "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
+ "walkdir",
 ]
 
 [[package]]

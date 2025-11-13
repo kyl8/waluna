@@ -2,14 +2,12 @@ import React, { useState, useCallback } from 'react';
 import { Box, Flex, useBreakpointValue } from '@chakra-ui/react';
 import { Global } from '@emotion/react';
 import { ApiProvider } from './contexts/ApiContext';
-import Navbar from './components/Navbar';
-import SearchContainer from './components/SearchContainer.jsx';
-import VideoPlayer from './components/VideoPlayer';
-import PlayerControls from './components/PlayerControls';
+import { Navbar, SearchContainer, VideoPlayer, PlayerControls, ConfigModal } from './components';
 
 function App() {
   const [isFavorited, setIsFavorited] = useState(false);
   const [playingTorrentHash, setPlayingTorrentHash] = useState(null);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
   const user = { name: 'kyl', photoUrl: 'https://i.pinimg.com/736x/a9/bc/64/a9bc64837740124cd0ffeeef4c8de068.jpg' };
   const posterUrl = 'https://www.artplayer.cn/assets/sample/poster.jpg';
@@ -27,6 +25,14 @@ function App() {
   const handlePlayTorrent = useCallback((torrent) => {
     console.log('[App] Playing torrent:', torrent.filename);
     setPlayingTorrentHash(torrent.hlsId || torrent.downloadId);
+  }, []);
+
+  const handleSettingsClick = useCallback(() => {
+    setIsConfigModalOpen(true);
+  }, []);
+
+  const handleConfigModalClose = useCallback(() => {
+    setIsConfigModalOpen(false);
   }, []);
   
   return (
@@ -53,7 +59,7 @@ function App() {
         minHeight="100vh" 
         color="gray.100"
       >
-        <Navbar userName={user.name} userPhotoUrl={user.photoUrl} onSettingsClick={() => {}} />
+        <Navbar userName={user.name} userPhotoUrl={user.photoUrl} onSettingsClick={handleSettingsClick} />
 
         <Flex
           as="main"
@@ -87,6 +93,13 @@ function App() {
             <PlayerControls isFavorited={isFavorited} onFavoriteToggle={handleFavoriteToggle} />
           </Box>
         </Flex>
+
+        <ConfigModal 
+          isOpen={isConfigModalOpen} 
+          onClose={handleConfigModalClose}
+          userName={user.name}
+          userPhotoUrl={user.photoUrl}
+        />
       </Flex>
     </ApiProvider>
   );

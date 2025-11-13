@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { VStack, Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, HStack, Tooltip, Text, Spinner } from '@chakra-ui/react';
 import { Global } from '@emotion/react';
 import { FaDownload, FaMagnet, FaSeedling, FaArrowDown, FaChevronUp, FaPlay } from 'react-icons/fa';
-import { filterTorrents } from '../utils/helpers/rakun.js';
-import { startFullPipeline } from '../utils/api/waluna.js';
-import VideoPlayer from './VideoPlayer';
+import { filterTorrents } from '../../utils/helpers/rakun.js';
+import { startFullPipeline } from '../../utils/api/waluna.js';
+import VideoPlayer from '../video/VideoPlayer';
 
 const TorrentTable = ({ episodeId, onClose, animeName, episodeNumber, seasonNumber, onPlayTorrent }) => {
   const [torrents, setTorrents] = useState([]);

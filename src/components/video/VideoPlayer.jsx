@@ -3,6 +3,11 @@ import { Box, VStack, Text } from '@chakra-ui/react';
 import Artplayer from 'artplayer';
 import Hls from 'hls.js';
 import { motion } from 'framer-motion';
+import artplayerPluginLibass from 'artplayer-plugin-libass';
+import { fetchSubtitleMetadata, getSubtitleTemplate } from '../../utils/api/waluna';
+import { Logger } from '../../utils/helpers/logger';
+
+const log = new Logger('VideoPlayer');
 
 const MotionBox = motion(Box);
 
@@ -10,6 +15,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 	const artRef = useRef(null);
 	const [currentUrl, setCurrentUrl] = useState('');
 	const artInstanceRef = useRef(null);
+	const libassAdapterRef = useRef(null);
 	const statusPollRef = useRef(null);
 	const [durationSeconds, setDurationSeconds] = useState(null);
 	const [displayTotal, setDisplayTotal] = useState('00:00');
@@ -20,10 +26,17 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 	const playbackMonitorRef = useRef(null); 
 	const playbackStuckAttemptsRef = useRef(0); 
 	const durationInjectedRef = useRef(false);
-	const initialSkipAttemptRef = useRef(0); 
+	const initialSkipAttemptRef = useRef(0);
+	const [subtitles, setSubtitles] = useState([]);
+	const subtitlesRef = useRef([]); 
+	const [subContentTemplate, setSubContentTemplate] = useState('');
 
 	const lastPolledDurationRef = useRef(null);
 	const pollStableCountRef = useRef(0);
+	const subtitleQueueRef = useRef(null);
+	const loadingSubtitleRef = useRef(false);
+	const lastTorrentHashRef = useRef(null);
+	const subtitleAbortRef = useRef(new AbortController());
 	
 	const injectDurationToVideo = (video, duration) => {
 		if (!video || !duration || typeof duration !== 'number' || duration <= 0) return;
@@ -38,7 +51,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 
 			durationInjectedRef.current = duration;
 		} catch (e) {
-			console.warn('Could not inject duration getter:', e.message);
+			log.warn('Could not inject duration getter', { error: e.message });
 		}
 	};
 
@@ -58,7 +71,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 	const startStatusPolling = useCallback((hlsId) => {
 		if (statusPollRef.current) clearInterval(statusPollRef.current);
 		const statusUrl = `http://127.0.0.1:8080/hls/status/${hlsId}`;
-		console.log('[Status] Polling:', statusUrl);
+		log.debug('Polling', { url: statusUrl });
 
 		const poll = async () => {
 			try {
@@ -92,7 +105,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 					}
 				}
 			} catch (error) {
-				console.warn('[Status] Polling error:', error.message);
+				log.warn('Polling error', { error: error.message });
 			}
 		};
 
@@ -133,22 +146,182 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 			const statusUrl = `http://127.0.0.1:8080/hls/status/${id}`;
 			const count = await checkEndpoint(statusUrl);
 			if (count > 0) {
-				console.log('[HLS Ready] status indicates', count, 'segments');
+				log.debug('HLS Ready', { segments: count });
 				return true;
 			}
 
 			const playlistUrl = `http://127.0.0.1:8080/hls/playlist/${id}`;
 			const plCount = await checkEndpoint(playlistUrl);
 			if (plCount > 0) {
-				console.log('[HLS Ready] playlist contains', plCount, 'segments');
+				log.debug('HLS Ready', { segments: plCount });
 				return true;
 			}
 
 			await new Promise(r => setTimeout(r, interval));
 		}
 
-		console.warn('[HLS Ready] timeout reached');
+		log.warn('HLS Ready timeout reached');
 		return false;
+	}, []);
+
+	// Carregar legendas do API
+	const loadSubtitles = useCallback(async (torrentId) => {
+		if (!torrentId) return null;
+
+		try {
+			const subs = await fetchSubtitleMetadata(torrentId);
+			if (subs && subs.length > 0) {
+				subtitlesRef.current = subs;
+				setSubtitles(subs);
+				return subs;
+			}
+			return null;
+		} catch (error) {
+			log.warn('Load error', { error: error.message });
+			return null;
+		}
+	}, []);
+
+	const loadSubtitleInPlayer = useCallback((art, subtitleUrl) => {
+		if (!art || !subtitleUrl) return;
+
+		let fullUrl = subtitleUrl;
+		if (!fullUrl.startsWith('http')) {
+			fullUrl = `http://127.0.0.1:8080${fullUrl}`;
+		}
+
+		subtitleQueueRef.current = fullUrl;
+		
+		const processQueue = async () => {
+			if (loadingSubtitleRef.current || !subtitleQueueRef.current) return;
+
+			loadingSubtitleRef.current = true;
+			const urlToLoad = subtitleQueueRef.current;
+			subtitleQueueRef.current = null;
+
+			try {
+			// Check if operation was aborted
+			if (subtitleAbortRef.current.signal.aborted) {
+				log.debug('Operation aborted');
+				loadingSubtitleRef.current = false;
+				return;
+			}				// Extra safety check for destroyed adapter
+				if (!libassAdapterRef.current?.switch) {
+					loadingSubtitleRef.current = false;
+					return;
+				}
+
+				// Validate file exists and has content
+			try {
+				const headResponse = await fetch(urlToLoad, { method: 'HEAD' });
+				if (!headResponse.ok) {
+					log.warn('File not accessible', { url: urlToLoad, status: headResponse.status });
+					loadingSubtitleRef.current = false;
+					return;
+				}
+				
+				const contentLength = headResponse.headers.get('content-length');
+				if (!contentLength || parseInt(contentLength) === 0) {
+					log.warn('File is empty or missing', { url: urlToLoad });
+					loadingSubtitleRef.current = false;
+					return;
+				}
+			} catch (checkError) {
+				log.warn('Cannot validate file', { url: urlToLoad, error: checkError.message });
+				loadingSubtitleRef.current = false;
+				return;
+			}				// Longer delay to ensure worker is fully ready
+				await new Promise(r => setTimeout(r, 300));
+				
+			// Check abort before proceeding
+			if (subtitleAbortRef.current.signal.aborted) {
+				log.debug('Operation aborted during delay');
+				loadingSubtitleRef.current = false;
+				return;
+			}
+			// Triple-check adapter still exists after delay (critical!)
+			if (!libassAdapterRef.current || !libassAdapterRef.current.switch) {
+				log.warn('Adapter destroyed during load, aborting');
+				loadingSubtitleRef.current = false;
+				return;
+			}
+			
+			try {
+				libassAdapterRef.current.switch(urlToLoad);
+				libassAdapterRef.current.show?.();
+				log.info('✓ Injected');
+			} catch (switchError) {
+				log.error('Failed to switch subtitle', switchError);
+				// Try to recover by retrying after longer delay
+				subtitleQueueRef.current = urlToLoad;
+				loadingSubtitleRef.current = false;
+				setTimeout(processQueue, 500);
+				return;
+			}
+		} catch (error) {
+			log.warn('Error', { error: error.message });
+		} finally {
+			loadingSubtitleRef.current = false;
+			if (subtitleQueueRef.current) processQueue();
+		}
+		};
+
+		processQueue();
+	}, []);
+
+	const createSubtitleSelector = useCallback((art, subs) => {
+		if (!art || !subs || subs.length === 0) return;
+
+		try {
+			const options = [
+				{ html: 'Off', value: 'off' },
+				...subs.map((sub) => {
+					let url = sub.url || '';
+					if (!url.startsWith('http') && url) {
+						url = `http://127.0.0.1:8080${url}`;
+					}
+					return {
+						html: `${sub.language || 'Unknown'} - ${sub.title || 'Subtitle'}`,
+						value: url
+					};
+				})
+			];
+
+			art.setting.add({
+				html: 'Subtitle',
+				icon: '<svg viewBox="0 0 24 24" fill="currentColor"><text x="2" y="18" font-size="14">CC</text></svg>',
+				tooltip: 'Select subtitle',
+				selector: options,
+				onSelect: function(item) {
+					if (item.value === 'off') {
+						log.debug('Off');
+						art.emit('artplayerPluginLibass:visible', false);
+					} else {
+						log.debug('Select', { url: item.value });
+						loadSubtitleInPlayer(art, item.value);
+					}
+					return item.html;
+				}
+			});
+		} catch (error) {
+			log.warn('Selector error', { error: error.message });
+		}
+	}, [loadSubtitleInPlayer]);
+
+	// Buscar template de legenda do backend
+	useEffect(() => {
+		const loadTemplate = async () => {
+			try {
+				const template = await getSubtitleTemplate();
+				if (template) {
+					setSubContentTemplate(template);
+				}
+			} catch (error) {
+				log.warn('Error loading subtitle template', { error: error.message });
+			}
+		};
+
+		loadTemplate();
 	}, []);
 
 	useEffect(() => {
@@ -158,7 +331,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 				try {
 					artInstanceRef.current.destroy(false);
 				} catch (e) {
-					console.error('[Player] Destroy error:', e.message);
+					log.error('Player destroy error', e);
 				}
 			}
 			try { if (hlsRef.current) { try { hlsRef.current.destroy(); } catch(_) {} hlsRef.current = null; } } catch(_) {}
@@ -167,7 +340,16 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 			artInstanceRef.current = null;
 			playbackStuckAttemptsRef.current = 0;
 			initialSkipAttemptRef.current = 0;
+			// Clear subtitle queue and adapter when destroying
+			libassAdapterRef.current = null;
+			subtitleQueueRef.current = null;
+			loadingSubtitleRef.current = false;
+			// Abort any pending subtitle operations
+			subtitleAbortRef.current.abort();
+			subtitleAbortRef.current = new AbortController();
 		};
+
+		if (!loadSubtitles || !createSubtitleSelector || !loadSubtitleInPlayer) return;
 
 		const hashToUse = torrentHash;
 		const hlsUrl = hashToUse ? `http://127.0.0.1:8080/hls/playlist/${hashToUse}` : videoUrl;
@@ -191,6 +373,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 			destroyPlayer();
 
 			if (hashToUse) {
+				// Just wait for HLS, legendas já estão extraídas
 				const ready = await waitForHlsReady(hashToUse, { timeout: 60000, interval: 1000 });
 				if (!ready) console.warn('[Player] HLS ready timeout');
 			}
@@ -328,7 +511,27 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
  								video.src = url;
  							}
  						},
- 					},
+					},
+				plugins: [
+					artplayerPluginLibass({
+						workerUrl: '/assets/subtitles-octopus-worker.js',
+						fallbackFont: '/assets/misc/SourceHanSansCN-Bold.woff2',
+						wasmUrl: '/assets/subtitles-octopus-worker.wasm',
+						subContent: subContentTemplate || `[Script Info]
+Title: Default
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`,
+					}),
+				],
  				});
  				if (art.video && currentDurationRef.current && currentDurationRef.current > 0) {
  					try {
@@ -339,16 +542,47 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
  						console.warn('Early injection failed:', e.message);
  					}
  				}
-				art.on('ready', () => {
-					try {
-						art.seek = 0;
-					} catch (e) { /* silent */ }
-					if (hashToUse) startStatusPolling(hashToUse);
-					if (currentDurationRef.current) setDisplayTotal(formatTime(currentDurationRef.current));
-					setDisplayCurrent(formatTime(0));
-				});
+			// LibASS Plugin Event Listeners
+			art.on('artplayerPluginLibass:init', async (adapter) => {
+				libassAdapterRef.current = adapter;
+				
+				if (hashToUse && adapter) {
+					// Apenas carrega legendas se for episódio novo
+					if (lastTorrentHashRef.current !== hashToUse) {
+						lastTorrentHashRef.current = hashToUse;
+						
+						try {
+							const subs = await loadSubtitles(hashToUse);
+							
+							if (subs && subs.length > 0) {
+								const firstSub = subs[0];
+								if (firstSub.url) {
+									loadSubtitleInPlayer(art, firstSub.url);
+									console.log('[Subtitles] ✓ Injected');
+								}
+								createSubtitleSelector(art, subs);
+							}
+						} catch (error) {
+							console.warn('[Subtitles] Error:', error.message);
+						}
+					}
+				}
+			});
 
-				if (art.video) {
+			art.on('artplayerPluginLibass:switch', (url) => {});
+			art.on('artplayerPluginLibass:visible', (visible) => {});
+			art.on('artplayerPluginLibass:destroy', () => {
+				libassAdapterRef.current = null;
+			});
+
+			art.on('ready', async () => {
+				try {
+					art.seek = 0;
+				} catch (e) { /* silent */ }
+				if (hashToUse) startStatusPolling(hashToUse);
+				if (currentDurationRef.current) setDisplayTotal(formatTime(currentDurationRef.current));
+				setDisplayCurrent(formatTime(0));
+			});				if (art.video) {
 					const fallbackOnTime = () => setDisplayCurrent(formatTime(art.video.currentTime || 0));
 					art.video.addEventListener('timeupdate', fallbackOnTime);
 				}
@@ -367,7 +601,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 			}
 			destroyPlayer();
 		};
-	}, [videoUrl, posterUrl, torrentHash, startStatusPolling, waitForHlsReady]);
+	}, [videoUrl, posterUrl, torrentHash, startStatusPolling, waitForHlsReady, loadSubtitles, createSubtitleSelector, loadSubtitleInPlayer]);
 
 	useEffect(() => {
 		if (durationSeconds) {

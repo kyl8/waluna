@@ -976,7 +976,7 @@ async fn resume_hls_conversion(Path(id): Path<String>) -> Result<Json<serde_json
 }
 
 
-/// Remove o cache HLS (diretório em ./cache/hls/<id>) e arquivos relacionados em ./cache/downloads
+// Remove o cache HLS (diretório em ./cache/hls/<id>) e arquivos relacionados em ./cache/downloads e .cache/subtitles
 async fn delete_cache(Path(id): Path<String>) -> Result<Json<serde_json::Value>, StatusCode> {
     use std::path::Path as StdPath;
 
@@ -1002,6 +1002,26 @@ async fn delete_cache(Path(id): Path<String>) -> Result<Json<serde_json::Value>,
         }
     } else {
         debug!("[HLS:{}] ℹ️  Diretório HLS não existe: {}", id, hls_dir);
+    }
+
+    let subtitle_dir = format!("./cache/subtitles/{}", id);
+    if StdPath::new(&subtitle_dir).exists() {
+        match std::fs::remove_dir_all(&subtitle_dir) {
+            Ok(_) => {
+                info!("[HLS:{}] ✅ Diretório de legendas removido: {}", id, subtitle_dir);
+                removed.push("subtitle_dir".to_string());
+            }
+            Err(e) => {
+                error!("[HLS:{}] ❌ Falha ao remover diretório de legendas: {} | Erro: {}", id, subtitle_dir, e);
+                return Ok(Json(serde_json::json!({
+                    "ok": false,
+                    "error": format!("Falha ao remover diretório de legendas: {}", e),
+                    "id": id
+                })));
+            }
+        }
+    } else {
+        debug!("[HLS:{}] ℹ️  Diretório de legendas não existe: {}", id, subtitle_dir);
     }
 
     let downloads_dir = "./cache/downloads";
@@ -1071,6 +1091,7 @@ async fn delete_cache(Path(id): Path<String>) -> Result<Json<serde_json::Value>,
 
 pub fn router() -> Router {
     Router::new()
+        .route("/", get(|| async { "HLS Manager is running" }))
         .route("/playlist/:id", get(serve_playlist))
         .route("/segments/:id/:segment", get(serve_segment))
         .route("/convert/:id", get(start_hls_conversion))

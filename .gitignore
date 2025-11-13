@@ -19,8 +19,7 @@ out/
 
 # Server-specific build outputs and generated files
 /server/target
-/server/dashboard.html
-
+/server/cache/
 
 # Dev server ffmpeg binaries — ignore the entire folder
 /server/ffmpeg
@@ -67,6 +66,6 @@ logs/
 
 # CI
 dist/
-
+public/dashboard.html
 
 # End of file

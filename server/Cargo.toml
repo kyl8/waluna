@@ -17,6 +17,8 @@ reqwest = { version = "0.11", features = ["json"] }
 librqbit = "8.1.1"
 chrono = "0.4"
 nyaa-si = "0.3.0"
+walkdir = "2"
+futures = "0.3"
 
 [[bin]]
 name = "waluna-back"

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { HStack, IconButton, Tooltip } from '@chakra-ui/react';
 import { FaArrowLeft, FaArrowRight, FaHeart, FaRegHeart, FaDownload, FaSave } from 'react-icons/fa';
-import { getOptimalDuration, subscribeFrameRate, unsubscribeFrameRate } from '../utils/helpers/animation.js';
+import { getOptimalDuration, subscribeFrameRate, unsubscribeFrameRate } from '../../utils/helpers/animation.js';
 
 const PlayerControls = ({ isFavorited, onFavoriteToggle }) => {
   const handleFavoriteClick = useCallback(() => {

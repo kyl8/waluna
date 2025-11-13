@@ -1,4 +1,3 @@
-
 # 🌙 Waluna
 
 Waluna é um projeto em Rust e Javascript (React e ChakraUI) que visa democratizar o acesso à 7ª arte de forma simples e sem enrolação. Suas funções são consistidas em:
@@ -411,6 +410,156 @@ Exemplo de resposta bem-sucedida:
 
 ---
 
+## Subtitles Endpoints
+
+### 16. Buscar Subtítulos
+
+#### GET `/subtitles/search`
+
+Busca subtítulos disponíveis para um vídeo específico.
+
+**Query Parameters**:
+
+| Parâmetro | Tipo   | Obrigatório | Descrição |
+|-----------|--------|-------------|-----------|
+| `id`      | string | ✓ Sim       | ID do download/vídeo |
+| `language`| string | Não         | Código de idioma (pt, en, es, etc.) |
+| `pretty`  | boolean | Não         | Formatação JSON legível (1 ou true) |
+
+**Response** (200 OK):
+```json
+{
+	"ok": true,
+	"id": "abc123def456",
+	"subtitles": [
+		{
+			"language": "pt",
+			"name": "Portuguese (Brazil)",
+			"url": "http://127.0.0.1:8080/subtitles/download/abc123def456/pt.vtt"
+		},
+		{
+			"language": "en",
+			"name": "English",
+			"url": "http://127.0.0.1:8080/subtitles/download/abc123def456/en.vtt"
+		}
+	],
+	"count": 2
+}
+```
+
+**Exemplo de Uso**:
+```bash
+curl "http://127.0.0.1:8080/subtitles/search?id=abc123def456&pretty=1"
+```
+
+---
+
+### 17. Download de Subtítulos
+
+#### GET `/subtitles/download/:id/:language`
+
+Faz download do arquivo de subtítulos em formato VTT ou SRT.
+
+**Path Parameters**:
+
+| Parâmetro | Tipo   | Descrição |
+|-----------|--------|-----------|
+| `id`      | string | ID do download/vídeo |
+| `language`| string | Código de idioma (pt, en, es, etc.) |
+
+**Response** (200 OK): arquivo de subtítulos com Content-Type `text/vtt` ou `text/plain`.
+
+**Response** (404 Not Found):
+```json
+{
+	"ok": false,
+	"error": "Subtitles not found for this language"
+}
+```
+
+**Exemplo de Uso**:
+```bash
+curl "http://127.0.0.1:8080/subtitles/download/abc123def456/pt" -o subtitles.vtt
+```
+
+---
+
+### 18. Upload de Subtítulos
+
+#### POST `/subtitles/upload/:id`
+
+Faz upload de um arquivo de subtítulos customizado para um vídeo.
+
+**Path Parameters**:
+
+| Parâmetro | Tipo   | Descrição |
+|-----------|--------|-----------|
+| `id`      | string | ID do download/vídeo |
+
+**Query Parameters**:
+
+| Parâmetro | Tipo   | Obrigatório | Descrição |
+|-----------|--------|-------------|-----------|
+| `language`| string | ✓ Sim       | Código de idioma |
+
+**Body**: multipart/form-data com arquivo `file`
+
+**Response** (200 OK):
+```json
+{
+	"ok": true,
+	"id": "abc123def456",
+	"language": "pt",
+	"filename": "subtitles_pt.vtt",
+	"message": "Subtitles uploaded successfully"
+}
+```
+
+**Response** (400 Bad Request):
+```json
+{
+	"ok": false,
+	"error": "No file provided or invalid format"
+}
+```
+
+**Exemplo de Uso**:
+```bash
+curl -X POST -F "file=@subtitles.vtt" "http://127.0.0.1:8080/subtitles/upload/abc123def456?language=pt"
+```
+
+---
+
+### 19. Deletar Subtítulos
+
+#### GET `/subtitles/delete/:id/:language`
+
+Remove um arquivo de subtítulos específico.
+
+**Path Parameters**:
+
+| Parâmetro | Tipo   | Descrição |
+|-----------|--------|-----------|
+| `id`      | string | ID do download/vídeo |
+| `language`| string | Código de idioma |
+
+**Response** (200 OK):
+```json
+{
+	"ok": true,
+	"id": "abc123def456",
+	"language": "pt",
+	"message": "Subtitles deleted successfully"
+}
+```
+
+**Exemplo de Uso**:
+```bash
+curl "http://127.0.0.1:8080/subtitles/delete/abc123def456/pt"
+```
+
+---
+
 ## Como rodar o projeto
 
 Pré-requisitos:
@@ -441,8 +590,7 @@ Observações:
 
 ## Contribuições
 
-Pull requests são bem-vindas. 
-
+Pull requests são bem-vindas.
 
 
 

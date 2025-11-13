@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { Box, Image, Text, VStack, HStack, Flex } from '@chakra-ui/react';
-import { getOptimalDuration, subscribeFrameRate, unsubscribeFrameRate } from '../utils/helpers/animation.js';
+import { getOptimalDuration, subscribeFrameRate, unsubscribeFrameRate } from '../../utils/helpers/animation.js';
 
 const SearchResultItem = ({ item, onClick }) => {
   const titleData = useMemo(() => {

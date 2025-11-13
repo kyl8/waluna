@@ -18,12 +18,12 @@ import {
   usePrefersReducedMotion
 } from '@chakra-ui/react';
 import { Global } from '@emotion/react';
-import { fetch_anizip_data } from '../utils/api/anizip.js';
-import logger from '../utils/helpers/logger.js';
-import useSortWorker from '../utils/hooks/useSortWorker.js';
-import EpisodesList from './EpisodesList.jsx';
-import VirtualList from './VirtualList.jsx';
-import { AnimeDetailSkeleton } from './SkeletonLoading';
+import { fetch_anizip_data } from '../../utils/api/anizip.js';
+import logger from '../../utils/helpers/logger.js';
+import useSortWorker from '../../utils/hooks/useSortWorker.js';
+import EpisodesList from '../episodes/EpisodesList.jsx';
+import VirtualList from '../common/VirtualList.jsx';
+import { AnimeDetailSkeleton } from '../common/SkeletonLoading';
 
 
 class ListErrorBoundary extends React.Component {

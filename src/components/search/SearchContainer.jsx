@@ -1,14 +1,14 @@
-﻿import React, { useState, useRef, useCallback, useDeferredValue, useEffect, useMemo, Suspense } from 'react';
-import { useApi } from '../contexts/ApiContext';
-import { fetch_jikan_data } from '../utils/api/jikan.js';
-import { fetch_anilist_data } from '../utils/api/anilist.js';
-import { searchCache } from '../utils/cache/memoryCache.js';
-import { indexedDBCache, STORES } from '../utils/cache/indexedDb.js';
+import React, { useState, useRef, useCallback, useDeferredValue, useEffect, useMemo, Suspense } from 'react';
+import { useApi } from '../../contexts/ApiContext';
+import { fetch_jikan_data } from '../../utils/api/jikan.js';
+import { fetch_anilist_data } from '../../utils/api/anilist.js';
+import { searchCache } from '../../utils/cache/memoryCache.js';
+import { indexedDBCache, STORES } from '../../utils/cache/indexedDb.js';
 import { Box, VStack, Text, Center, Badge, Spinner, Portal } from '@chakra-ui/react';
 import SearchBar from './SearchBar'; 
 import SearchResultItem from './SearchResultItem'; 
-import AnimeDetailModal from './AnimeDetailModal'; 
-import { SearchResultSkeleton } from './SkeletonLoading';
+import AnimeDetailModal from '../modals/AnimeDetailModal'; 
+import { SearchResultSkeleton } from '../common/SkeletonLoading';
 
 const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
   const [query, setQuery] = useState('');

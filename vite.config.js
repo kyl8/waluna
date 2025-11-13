@@ -4,7 +4,9 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  // resolve/alias deve ficar no topo-level, não dentro de server
+  root: path.resolve(__dirname, '.'),
+  index: path.resolve(__dirname, 'index.html'),
+  publicDir: 'public',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -17,20 +19,36 @@ export default defineConfig({
       protocol: 'ws',
       host: 'localhost',
       port: 3000,
-      timeout: 120000,
+    },
+    cors: true,
+    watch: {
+      ignored: ['**/server/**', '**/node_modules/**', '**/.git/**', '**/dist/**', '**/cache/**'],
     },
   },
+  build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    sourcemap: false,
+    reportCompressedSize: false,
+    outDir: 'dist',
+  },
   worker: {
-    // Configure Web Worker handling
     format: 'es',
-    rollupOptions: {
-      output: {
-        entryFileNames: '[name].js',
-      },
-    },
   },
   define: {
     __DEV__: JSON.stringify(true),
     __LOG_LEVEL__: JSON.stringify(import.meta.env.DEV ? 'debug' : 'info'),
+  },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      '@chakra-ui/react',
+      '@chakra-ui/hooks',
+      '@chakra-ui/system',
+      '@emotion/react',
+      '@emotion/styled',
+      'framer-motion',
+    ],
   },
 });

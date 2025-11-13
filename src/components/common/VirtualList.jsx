@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Box, HStack, Button, Text, VStack } from '@chakra-ui/react';
-import logger from '../utils/helpers/logger.js';
+import logger from '../../utils/helpers/logger.js';
 
 let cachedFixedSizeList = null;
 
