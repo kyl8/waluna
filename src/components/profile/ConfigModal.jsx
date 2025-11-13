@@ -51,7 +51,7 @@ import { Global } from '@emotion/react';
 import AnimeCard from './AnimeCard';
 import ExpandedStatsSection from './ExpandedStatsSection';
 
-// Mock data para histórico e status
+// Mockando pra ver como fica
 const mockData = {
   watching: [
     { 

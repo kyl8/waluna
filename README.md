@@ -410,21 +410,130 @@ Exemplo de resposta bem-sucedida:
 
 ---
 
-## Subtitles Endpoints
+## Stream Manager Endpoints
 
-### 16. Buscar Subtítulos
+### 16. Listar Streams (Vídeos, Áudio, Legendas)
 
-#### GET `/subtitles/search`
+#### GET `/streams/:id`
 
-Busca subtítulos disponíveis para um vídeo específico.
+Lista todos os streams (vídeo, áudio, legendas, anexos) descobertos em um arquivo de vídeo para um determinado ID de download.
+
+**Path Parameters**:
+
+| Parâmetro | Tipo   | Descrição |
+|-----------|--------|-----------|
+| `id`      | string | ID do download/vídeo |
 
 **Query Parameters**:
 
 | Parâmetro | Tipo   | Obrigatório | Descrição |
 |-----------|--------|-------------|-----------|
-| `id`      | string | ✓ Sim       | ID do download/vídeo |
-| `language`| string | Não         | Código de idioma (pt, en, es, etc.) |
-| `pretty`  | boolean | Não         | Formatação JSON legível (1 ou true) |
+| `filter`  | string | Não         | Filtro: `video`, `audio`, `subtitle`, `attachment`, `all` |
+
+**Response** (200 OK):
+```json
+{
+	"ok": true,
+	"id": "abc123def456",
+	"streams": [
+		{
+			"index": 0,
+			"codec_type": "video",
+			"codec_name": "h264",
+			"width": 1920,
+			"height": 1080,
+			"duration": 1302.5
+		},
+		{
+			"index": 1,
+			"codec_type": "audio",
+			"codec_name": "aac",
+			"language": "en",
+			"channels": 2
+		},
+		{
+			"index": 2,
+			"codec_type": "subtitle",
+			"codec_name": "ass",
+			"language": "pt"
+		}
+	]
+}
+```
+
+**Exemplo de Uso**:
+```bash
+# Listar todos os streams
+curl "http://127.0.0.1:8080/streams/abc123def456"
+
+# Listar apenas legendas
+curl "http://127.0.0.1:8080/streams/abc123def456?filter=subtitle"
+
+# Listar apenas áudio
+curl "http://127.0.0.1:8080/streams/abc123def456?filter=audio"
+```
+
+---
+
+### 17. Extrair Legendas
+
+#### GET `/streams/extract/:id`
+
+Extrai streams de legendas para arquivos e os serve via `/cache/subtitles/:id/`.
+
+**Path Parameters**:
+
+| Parâmetro | Tipo   | Descrição |
+|-----------|--------|-----------|
+| `id`      | string | ID do download/vídeo |
+
+**Response** (200 OK):
+```json
+{
+	"ok": true,
+	"id": "abc123def456",
+	"extracted_subtitles": [
+		{
+			"language": "pt",
+			"file": "subtitle_0_pt.ass",
+			"url": "http://127.0.0.1:8080/cache/subtitles/abc123def456/subtitle_0_pt.ass"
+		},
+		{
+			"language": "en",
+			"file": "subtitle_1_en.ass",
+			"url": "http://127.0.0.1:8080/cache/subtitles/abc123def456/subtitle_1_en.ass"
+		}
+	],
+	"message": "Subtitles extracted and served"
+}
+```
+
+**Response** (404 Not Found):
+```json
+{
+	"ok": false,
+	"error": "Video file not found or no subtitles detected"
+}
+```
+
+**Exemplo de Uso**:
+```bash
+curl "http://127.0.0.1:8080/streams/extract/abc123def456"
+```
+
+---
+
+### 18. Obter Legendas - Todas
+
+#### GET `/streams/subs/:id`
+
+Obtém metadados de todos os streams de legendas disponíveis para um vídeo.
+
+**Path Parameters**:
+
+| Parâmetro | Tipo   | Descrição |
+|-----------|--------|-----------|
+| `id`      | string | ID do download/vídeo |
 
 **Response** (200 OK):
 ```json
@@ -433,14 +542,16 @@ Busca subtítulos disponíveis para um vídeo específico.
 	"id": "abc123def456",
 	"subtitles": [
 		{
+			"index": 2,
+			"codec_name": "ass",
 			"language": "pt",
-			"name": "Portuguese (Brazil)",
-			"url": "http://127.0.0.1:8080/subtitles/download/abc123def456/pt.vtt"
+			"title": "Portuguese"
 		},
 		{
+			"index": 3,
+			"codec_name": "ass",
 			"language": "en",
-			"name": "English",
-			"url": "http://127.0.0.1:8080/subtitles/download/abc123def456/en.vtt"
+			"title": "English"
 		}
 	],
 	"count": 2
@@ -449,113 +560,51 @@ Busca subtítulos disponíveis para um vídeo específico.
 
 **Exemplo de Uso**:
 ```bash
-curl "http://127.0.0.1:8080/subtitles/search?id=abc123def456&pretty=1"
+curl "http://127.0.0.1:8080/streams/subs/abc123def456"
 ```
 
 ---
 
-### 17. Download de Subtítulos
+### 19. Obter Legendas - Por Idioma
 
-#### GET `/subtitles/download/:id/:language`
+#### GET `/streams/subs/:id/:language`
 
-Faz download do arquivo de subtítulos em formato VTT ou SRT.
+Obtém metadados de legendas filtradas por código de idioma.
 
 **Path Parameters**:
 
 | Parâmetro | Tipo   | Descrição |
 |-----------|--------|-----------|
 | `id`      | string | ID do download/vídeo |
-| `language`| string | Código de idioma (pt, en, es, etc.) |
+| `language`| string | Código de idioma (pt, en, es, ja, etc.) |
 
-**Response** (200 OK): arquivo de subtítulos com Content-Type `text/vtt` ou `text/plain`.
+**Response** (200 OK):
+```json
+{
+	"ok": true,
+	"id": "abc123def456",
+	"language": "pt",
+	"subtitle": {
+		"index": 2,
+		"codec_name": "ass",
+		"language": "pt",
+		"title": "Portuguese"
+	}
+}
+```
 
 **Response** (404 Not Found):
 ```json
 {
 	"ok": false,
-	"error": "Subtitles not found for this language"
+	"error": "No subtitles found for language: pt"
 }
 ```
 
 **Exemplo de Uso**:
 ```bash
-curl "http://127.0.0.1:8080/subtitles/download/abc123def456/pt" -o subtitles.vtt
-```
-
----
-
-### 18. Upload de Subtítulos
-
-#### POST `/subtitles/upload/:id`
-
-Faz upload de um arquivo de subtítulos customizado para um vídeo.
-
-**Path Parameters**:
-
-| Parâmetro | Tipo   | Descrição |
-|-----------|--------|-----------|
-| `id`      | string | ID do download/vídeo |
-
-**Query Parameters**:
-
-| Parâmetro | Tipo   | Obrigatório | Descrição |
-|-----------|--------|-------------|-----------|
-| `language`| string | ✓ Sim       | Código de idioma |
-
-**Body**: multipart/form-data com arquivo `file`
-
-**Response** (200 OK):
-```json
-{
-	"ok": true,
-	"id": "abc123def456",
-	"language": "pt",
-	"filename": "subtitles_pt.vtt",
-	"message": "Subtitles uploaded successfully"
-}
-```
-
-**Response** (400 Bad Request):
-```json
-{
-	"ok": false,
-	"error": "No file provided or invalid format"
-}
-```
-
-**Exemplo de Uso**:
-```bash
-curl -X POST -F "file=@subtitles.vtt" "http://127.0.0.1:8080/subtitles/upload/abc123def456?language=pt"
-```
-
----
-
-### 19. Deletar Subtítulos
-
-#### GET `/subtitles/delete/:id/:language`
-
-Remove um arquivo de subtítulos específico.
-
-**Path Parameters**:
-
-| Parâmetro | Tipo   | Descrição |
-|-----------|--------|-----------|
-| `id`      | string | ID do download/vídeo |
-| `language`| string | Código de idioma |
-
-**Response** (200 OK):
-```json
-{
-	"ok": true,
-	"id": "abc123def456",
-	"language": "pt",
-	"message": "Subtitles deleted successfully"
-}
-```
-
-**Exemplo de Uso**:
-```bash
-curl "http://127.0.0.1:8080/subtitles/delete/abc123def456/pt"
+curl "http://127.0.0.1:8080/streams/subs/abc123def456/pt"
+curl "http://127.0.0.1:8080/streams/subs/abc123def456/en"
 ```
 
 ---
