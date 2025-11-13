@@ -14,7 +14,7 @@ const ExpandedStatsSection = React.memo(({ stats }) => (
   <VStack spacing={1.5} align="stretch" w="100%">
     <Heading size="xs" color="gray.100">📊 Stats Expandidas</Heading>
     
-    {/* Grid 2x2 para stats principais */}
+    {/* Estatísticas Principais */}
     <HStack spacing={2} w="100%">
       <Box flex={1} bg="#1a1a1a" p={2} borderRadius="sm" border="1px solid #3d3d3d" css={{ contain: 'layout paint' }}>
         <Text fontSize="10px" color="gray.500">Minutos</Text>
@@ -40,7 +40,7 @@ const ExpandedStatsSection = React.memo(({ stats }) => (
       </Box>
     </HStack>
 
-    {/* Por Semana - Compacto */}
+    {/* Média de Episódios por Semana */}
     <Box bg="#1a1a1a" p={1.5} borderRadius="sm" border="1px solid #3d3d3d" w="100%">
       <HStack spacing={1} justify="space-between">
         <HStack spacing={0.5}>
