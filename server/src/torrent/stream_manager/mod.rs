@@ -518,7 +518,6 @@ impl StreamManager {
                         None
                     });
 
-                // Skip duplicate languages (keep only first occurrence)
                 let lang_key = language.as_deref().unwrap_or("unknown");
                 if seen_languages.contains(lang_key) {
                     info!("[StreamManager:{}] Pulando idioma duplicado: {}", download_id, lang_key);
@@ -559,7 +558,6 @@ impl StreamManager {
                             output_path,
                         ]
                     } else {
-                        // Convert to ASS format
                         vec![
                             "-i".to_string(),
                             video_path_clone,
@@ -590,13 +588,10 @@ impl StreamManager {
             }
         }
 
-        // Execute all extractions in parallel using join_all
         if extract_tasks.len() > 0 {
             info!("[StreamManager:{}] Extraindo {} idiomas de legendas em paralelo", download_id, extract_tasks.len());
             
             let results = futures::future::join_all(extract_tasks).await;
-            
-            // Check if any extraction failed
             for (i, result) in results.iter().enumerate() {
                 if let Err(e) = result {
                     info!("[StreamManager:{}] Falha ao extrair legenda {}: {}", download_id, i, e);
@@ -606,7 +601,6 @@ impl StreamManager {
                 }
             }
 
-            // Verify that files were actually created and have content
             let mut verified_responses = Vec::new();
             for response in subtitle_responses.iter() {
                 let file_path = format!("{}/{}", subtitles_dir, response.url.split('/').last().unwrap_or(""));
@@ -731,7 +725,7 @@ async fn get_subs_by_lang(
             codec_name: s.codec_name,
             language: s.language,
             title: s.title,
-            url: String::new(), // Empty URL when not cached
+            url: String::new(), 
         })
         .collect();
 
