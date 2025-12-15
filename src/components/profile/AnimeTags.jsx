@@ -12,6 +12,7 @@ import {
   Text,
 } from '@chakra-ui/react';
 import { IoAdd } from 'react-icons/io5';
+import logger from '../../utils/helpers/logger.js';
 
 const AnimeTags = React.memo(({ animeId, initialTags = [] }) => {
   const [tags, setTags] = useState(initialTags);
@@ -21,13 +22,13 @@ const AnimeTags = React.memo(({ animeId, initialTags = [] }) => {
     if (newTag.trim() && !tags.includes(newTag.trim())) {
       setTags([...tags, newTag.trim()]);
       setNewTag('');
-      console.log(`Tag adicionada ao anime ${animeId}:`, newTag);
+      logger.info(`Tag adicionada ao anime ${animeId}:`, newTag);
     }
   }, [newTag, tags, animeId]);
 
   const handleRemoveTag = useCallback((tagToRemove) => {
     setTags(tags.filter((tag) => tag !== tagToRemove));
-    console.log(`Tag removida do anime ${animeId}:`, tagToRemove);
+    logger.info(`Tag removida do anime ${animeId}:`, tagToRemove);
   }, [tags, animeId]);
 
   const handleKeyPress = useCallback((e) => {

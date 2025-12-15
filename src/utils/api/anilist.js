@@ -124,14 +124,14 @@ export async function fetch_anilist_data(anime_name) {
     }
 
     // fallback using fuzzy search with processed terms
-    logger.warn("⚠️ empty direct AniList search, trying processed terms...");
+    logger.warn("empty direct AniList search, trying processed terms...");
     const processed_terms = await process_term(anime_name);
     
     if (!processed_terms || processed_terms.length === 0) {
       throw new Error("no processed terms from AniList search");
     }
 
-  logger.debug("📋 Processed terms:", processed_terms);
+  logger.debug("processed terms:", processed_terms);
 
     for (const term of processed_terms) {
       try {
@@ -180,18 +180,18 @@ export async function fetch_anilist_data(anime_name) {
 
         await sleep(500); // anilist delay is smaller than jikan
         } catch (error) {
-        logger.error(`❌ Error fetching "${term}" from AniList:`, error);
+        logger.error(`error fetching "${term}" from AniList:`, error);
       }
     }
 
     if (results.length === 0) {
-      throw new Error("No matching anime found on AniList.");
+      throw new Error("no matching anime found on AniList.");
     }
 
     return results;
 
     } catch (error) {
-    logger.error("❌ Error in AniList search:", error);
+    logger.error("error in AniList search:", error);
     throw error;
   }
 }

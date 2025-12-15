@@ -29,7 +29,6 @@ const AnimeCard = React.memo(({ anime, isWatching = false, isCompleted = false, 
       css={{ contain: 'layout paint' }}
       minW={sizeConfig.minW}
     >
-      {/* Cover Image */}
       <Box position="relative" h={sizeConfig.coverH} bg="#1a1a1a" overflow="hidden">
         <Image
           src={anime.cover}
@@ -41,13 +40,11 @@ const AnimeCard = React.memo(({ anime, isWatching = false, isCompleted = false, 
         />
       </Box>
 
-      {/* Info */}
       <VStack spacing={2} p={sizeConfig.p} align="stretch">
         <Text fontSize={sizeConfig.fontSize} fontWeight="bold" color="gray.100" noOfLines={2}>
           {anime.title}
         </Text>
 
-        {/* Score ou Episode Info */}
         {anime.score && (
           <HStack justify="space-between" fontSize="10px">
             <Text color="gray.500">Score</Text>
@@ -55,7 +52,6 @@ const AnimeCard = React.memo(({ anime, isWatching = false, isCompleted = false, 
           </HStack>
         )}
 
-        {/* Progress Bar */}
         {(isWatching || isCompleted) && (
           <VStack spacing={1} align="stretch">
             {isWatching && (
@@ -74,7 +70,6 @@ const AnimeCard = React.memo(({ anime, isWatching = false, isCompleted = false, 
           </VStack>
         )}
 
-        {/* Episodes */}
         {!isWatching && !isCompleted && anime.episodes && (
           <Text fontSize="9px" color="gray.500">
             {anime.episodes} episódios

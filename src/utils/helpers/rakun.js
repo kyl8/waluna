@@ -1,4 +1,5 @@
 import rakun from "@lowlighter/rakun"
+
 // simple function to format parser output. uses the torrent filename to parse and extract relevant info
 // its merged with other torrent info parsed by the backend using rust and nyaa-si library 
 // thanks to @lowlighter for the rakun library!

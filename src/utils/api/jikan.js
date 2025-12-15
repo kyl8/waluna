@@ -11,7 +11,7 @@ function get_titles(data) {
 export async function fetch_jikan_data(anime_name) {
   const results = [];
 
-  logger.debug("🔍 Searching:", anime_name);
+  logger.debug("searching:", anime_name);
 
   try {
     const directResponse = await fetch(
@@ -22,7 +22,7 @@ export async function fetch_jikan_data(anime_name) {
       const directJson = await directResponse.json();
       const directAnimes = directJson.data || [];
 
-  logger.info("✅ Direct search returned:", directAnimes.length, "results");
+  logger.info("direct search returned:", directAnimes.length, "results");
 
       for (const anime of directAnimes) {
         results.push({ term: anime_name, data: anime });
@@ -35,14 +35,14 @@ export async function fetch_jikan_data(anime_name) {
     }
 
     // fallback - try with processed terms from names.json using fuzzy match
-  logger.warn("⚠️ Direct search empty, trying processed terms...");
+  logger.warn("direct search empty, trying processed terms...");
     const processed_terms = await process_term(anime_name);
     
     if (!processed_terms || processed_terms.length === 0) {
       throw new Error("No anime found.");
     }
 
-  logger.debug("📋 Processed terms:", processed_terms);
+  logger.debug("processed terms:", processed_terms);
 
     const delay = 1.100; // 1.1 secs
 
@@ -53,7 +53,7 @@ export async function fetch_jikan_data(anime_name) {
         );
 
         if (!response.ok) {
-          logger.error(`❌ Error fetching "${term}"`);
+          logger.error(`error fetching "${term}"`);
           continue;
         }
 
@@ -77,20 +77,20 @@ export async function fetch_jikan_data(anime_name) {
           }
         }
       } catch (error) {
-        logger.error(`❌ Error fetching "${term}":`, error);
+        logger.error(`error fetching "${term}":`, error);
       }
 
       await sleep(delay);
     }
 
     if (results.length === 0) {
-      throw new Error("No matching anime found.");
+      throw new Error("no matching anime found.");
     }
 
     return results;
 
   } catch (error) {
-    logger.error("❌ Error fetching:", error);
+    logger.error("error fetching:", error);
     throw error;
   }
 }

@@ -62,18 +62,14 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
   useEffect(() => {
     const loadAnimeDetails = async () => {
       setLoading(true);
-
-      // use data from prop first
       setAnimeDetails(anime);
 
       try {
-        logger.debug('📦 Loading anime episodes:', anime.title || anime.title_english || anime.name || anime.titles?.[0]?.title);
+        logger.debug('Loading anime episodes:', anime.title || anime.title_english || anime.name || anime.titles?.[0]?.title);
 
-        // tries to use anilist_id when possible
         let anilistId = anime.anilist_id || anime.id || null;
         if (anilistId) anilistId = Number(anilistId);
 
-        // search for episodes. Pass an object with both ids when possible
         const fetchParam = {
           anilist_id: anilistId || null,
           mal_id: anime.mal_id || anime.idMal || null
@@ -83,14 +79,14 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
 
         if (results.length > 0 && results[0].data.episodeList) {
           const episodeData = results[0].data;
-          logger.info('✅ Loading episodes:', episodeData.episodeList.length);
+          logger.info('Loading episodes:', episodeData.episodeList.length);
           setEpisodes(episodeData.episodeList);
         } else {
-          logger.warn('⚠️ No episodes found on AniZip');
+          logger.warn('No episodes found on AniZip');
           setEpisodes([]);
         }
       } catch (err) {
-        logger.error('❌ Error loading episodes:', err);
+        logger.error('Error loading episodes:', err);
         setEpisodes([]);
       } finally {
         setLoading(false);
@@ -106,7 +102,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
     const measure = () => {
       if (!episodesContainerRef.current) return;
       const w = episodesContainerRef.current.clientWidth;
-      logger.info(`📏 Container width measured: ${w}`);
+      logger.info(`Container width measured: ${w}`);
       if (w && w !== containerWidth) {
         setContainerWidth(w);
       }
@@ -163,7 +159,6 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
   const getTitle = memoizedHelpers.getTitle;
   const getImage = memoizedHelpers.getImage;
 
-  // use animedetails if available, else use anime
   const EpisodeRowInner = ({ ep, style, index, shouldReduceMotion }) => {
     const formattedDate = ep.airDate ? new Date(ep.airDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
     const episodeLabel = Number.isFinite(ep.number) ? `EP ${ep.number}` : 'EP N/A';
@@ -270,7 +265,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
   }, [visibleCount, deferredEpisodes.length]);
 
   useEffect(() => {
-    logger.debug(`🔄 visibleCount state changed in AnimeDetailModal: ${visibleCount}`);
+    logger.debug(`visibleCount state changed in AnimeDetailModal: ${visibleCount}`);
   }, [visibleCount]);
 
   if (!anime) return null;
@@ -308,7 +303,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
             ) : (
               <Box css={{ contain: 'layout style paint' }}>
                 <Grid templateColumns={{ base: '1fr', lg: '300px 1fr' }} gap={6}>
-                  {/* Coluna esquerda - Poster e info */}
+                  {/* coluna esquerda - Poster e info */}
                   <Box>
                     <VStack align="stretch" spacing={4}>
                       <Image
@@ -357,10 +352,10 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
                     </VStack>
                   </Box>
 
-                  {/* Coluna direita - Sinopse e Episódios */}
+                  {/* coluna direita - sinopse e episódios */}
                   <Box>
                     <VStack align="stretch" spacing={6}>
-                      {/* Sinopse */}
+                      {/* sinopse */}
                       <Box>
                         <Text fontSize="xl" fontWeight="bold" mb={3}>Sinopse</Text>
                         <Text fontSize="sm" color="gray.300" lineHeight="tall">
@@ -368,7 +363,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
                         </Text>
                       </Box>
 
-                      {/* Lista de Episódios */}
+                      {/* lista de episódios */}
                       <Box
                         ref={episodesContainerRef}
                         key={`episodes-container-${anime.id}`}

@@ -1,3 +1,5 @@
+import logger from '../../utils/helpers/logger.js';
+
 const DB_NAME = 'WalunaDB';
 const DB_VERSION = 1;
 
@@ -100,7 +102,7 @@ class IndexedDBCache {
 export const indexedDBCache = new IndexedDBCache();
 
 if (typeof window !== 'undefined' && window.indexedDB) {
-  indexedDBCache.init().catch(err => console.warn('IndexedDB init failed:', err));
+  indexedDBCache.init().catch(err => logger.warn('IndexedDB init failed:', err));
 }
 
 export default indexedDBCache;

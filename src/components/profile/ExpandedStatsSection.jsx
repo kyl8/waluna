@@ -14,7 +14,6 @@ const ExpandedStatsSection = React.memo(({ stats }) => (
   <VStack spacing={1.5} align="stretch" w="100%">
     <Heading size="xs" color="gray.100">📊 Stats Expandidas</Heading>
     
-    {/* Estatísticas Principais */}
     <HStack spacing={2} w="100%">
       <Box flex={1} bg="#1a1a1a" p={2} borderRadius="sm" border="1px solid #3d3d3d" css={{ contain: 'layout paint' }}>
         <Text fontSize="10px" color="gray.500">Minutos</Text>
@@ -40,7 +39,6 @@ const ExpandedStatsSection = React.memo(({ stats }) => (
       </Box>
     </HStack>
 
-    {/* Média de Episódios por Semana */}
     <Box bg="#1a1a1a" p={1.5} borderRadius="sm" border="1px solid #3d3d3d" w="100%">
       <HStack spacing={1} justify="space-between">
         <HStack spacing={0.5}>
@@ -51,7 +49,6 @@ const ExpandedStatsSection = React.memo(({ stats }) => (
       </HStack>
     </Box>
 
-    {/* Gêneros Favoritos - Muito Compacto */}
     <VStack align="stretch" spacing={1} w="100%" bg="#1a1a1a" p={1.5} borderRadius="sm" border="1px solid #3d3d3d">
       <Text fontSize="10px" color="gray.500">Gêneros Favoritos</Text>
       {stats.favoriteGenres.slice(0, 3).map((genre) => (

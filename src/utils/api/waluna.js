@@ -1,7 +1,6 @@
-import { Logger } from '../helpers/logger';
-
+import logger from '../helpers/logger';
 const API_BASE_URL = 'http://127.0.0.1:8080';
-const log = new Logger('API');
+
 
 //check server status
 export const checkServer = async () => {
@@ -9,7 +8,7 @@ export const checkServer = async () => {
     const response = await fetch(`${API_BASE_URL}/`);
     return response.ok;
   } catch (error) {
-    log.error('Server check failed', error);
+    log.error('server check failed', error);
     return false;
   }
 };
@@ -37,10 +36,10 @@ export const searchTorrents = async (query = 'Ousama Ranking', pretty = true) =>
       throw new Error(data.error || 'Search failed');
     }
 
-    console.log(`[API] Search results for "${query}":`, data.count, 'torrents');
+    logger.info(`[API] search results for "${query}":`, data.count, 'torrents');
     return data;
   } catch (error) {
-    log.error('Search error', error);
+    logger.error('search error', error);
     throw error;
   }
 };
@@ -52,7 +51,7 @@ export const searchTorrents = async (query = 'Ousama Ranking', pretty = true) =>
 export const startDownload = async (magnetLink) => {
   try {
     if (!magnetLink) {
-      throw new Error('Magnet link is required');
+      throw new Error('magnet link is required');
     }
 
     const params = new URLSearchParams();
@@ -70,10 +69,10 @@ export const startDownload = async (magnetLink) => {
       throw new Error(data.error || 'Download failed');
     }
 
-    console.log('[API] Download started:', data.download_id);
+    logger.info('[API] download started:', data.download_id);
     return data;
   } catch (error) {
-    log.error('Start download error', error);
+    logger.error('start download error', error);
     throw error;
   }
 };
@@ -85,7 +84,7 @@ export const startDownload = async (magnetLink) => {
 export const encodeMagnet = async (magnetLink) => {
   try {
     if (!magnetLink) {
-      throw new Error('Magnet link is required');
+      throw new Error('magnet link is required');
     }
 
     const params = new URLSearchParams();
@@ -105,7 +104,7 @@ export const encodeMagnet = async (magnetLink) => {
 
     return data;
   } catch (error) {
-    log.error('Encode magnet error', error);
+    logger.error('encode magnet error', error);
     throw error;
   }
 };
@@ -117,7 +116,7 @@ export const encodeMagnet = async (magnetLink) => {
 export const decodeMagnet = async (encoded) => {
   try {
     if (!encoded) {
-      throw new Error('Encoded magnet link is required');
+      throw new Error('encoded magnet link is required');
     }
 
     const params = new URLSearchParams();
@@ -137,7 +136,7 @@ export const decodeMagnet = async (encoded) => {
 
     return data;
   } catch (error) {
-    log.error('Decode magnet error', error);
+    logger.error('decode magnet error', error);
     throw error;
   }
 };
@@ -150,7 +149,7 @@ export const decodeMagnet = async (encoded) => {
 export const getDownloadStatus = async (id, pretty = true) => {
   try {
     if (!id) {
-      throw new Error('Download ID is required');
+      throw new Error('download ID is required');
     }
 
     const params = new URLSearchParams();
@@ -171,7 +170,7 @@ export const getDownloadStatus = async (id, pretty = true) => {
 
     return data;
   } catch (error) {
-    log.error('Get download status error', error);
+    logger.error('get download status error', error);
     throw error;
   }
 };
@@ -184,7 +183,7 @@ export const getDownloadStatus = async (id, pretty = true) => {
 export const getDownloadProgress = async (id, pretty = true) => {
   try {
     if (!id) {
-      throw new Error('Download ID is required');
+      throw new Error('download ID is required');
     }
 
     const params = new URLSearchParams();
@@ -205,7 +204,7 @@ export const getDownloadProgress = async (id, pretty = true) => {
 
     return data;
   } catch (error) {
-    log.error('Get download progress error', error);
+    logger.error('get download progress error', error);
     throw error;
   }
 };
@@ -217,7 +216,7 @@ export const getDownloadProgress = async (id, pretty = true) => {
 export const stopDownload = async (id) => {
   try {
     if (!id) {
-      throw new Error('Download ID is required');
+      throw new Error('download ID is required');
     }
 
     const params = new URLSearchParams();
@@ -235,10 +234,10 @@ export const stopDownload = async (id) => {
       throw new Error(data.error || 'Stop failed');
     }
 
-    console.log('[API] Download stopped:', id);
+    logger.info('[API] download stopped:', id);
     return data;
   } catch (error) {
-    log.error('Stop download error', error);
+    logger.error('stop download error', error);
     throw error;
   }
 };
@@ -264,10 +263,10 @@ export const listActiveDownloads = async (pretty = true) => {
       throw new Error(data.error || 'List failed');
     }
 
-    console.log('[API] Active downloads:', data.count);
+    logger.info('[API] active downloads:', data.count);
     return data;
   } catch (error) {
-    log.error('List active downloads error', error);
+    logger.error('list active downloads error', error);
     throw error;
   }
 };
@@ -281,14 +280,14 @@ export const listActiveDownloads = async (pretty = true) => {
 export const startHLSConversion = async (id, maxRetries = 15, retryDelay = 2000) => {
   try {
     if (!id) {
-      throw new Error('Download ID is required');
+      throw new Error('download ID is required');
     }
 
     let lastError;
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[API] HLS conversion attempt ${attempt}/${maxRetries}...`);
+        logger.info(`[API] HLS conversion attempt ${attempt}/${maxRetries}...`);
         const response = await fetch(`http://127.0.0.1:8080/hls/status/${id}`);
         
         if (!response.ok) {
@@ -296,12 +295,12 @@ export const startHLSConversion = async (id, maxRetries = 15, retryDelay = 2000)
         }
 
         const data = await response.json();
-        console.log('[API] HLS conversion initiated:', id);
+        logger.info('[API] HLS conversion initiated:', id);
         return data;
       } catch (error) {
         lastError = error;
         if (attempt < maxRetries) {
-          console.log(`[API] Attempt ${attempt} failed, retrying in ${retryDelay}ms...`);
+          logger.info(`[API] Attempt ${attempt} failed, retrying in ${retryDelay}ms...`);
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
       }
@@ -309,7 +308,7 @@ export const startHLSConversion = async (id, maxRetries = 15, retryDelay = 2000)
 
     throw lastError || new Error('Failed to start HLS conversion after retries');
   } catch (error) {
-    log.error('Start HLS conversion error', error);
+    logger.error('start hls conversion error', error);
     throw error;
   }
 };
@@ -321,7 +320,7 @@ export const startHLSConversion = async (id, maxRetries = 15, retryDelay = 2000)
 export const getHLSStatus = async (id) => {
   try {
     if (!id) {
-      throw new Error('HLS ID is required');
+      throw new Error('hls ID is required');
     }
 
     const response = await fetch(`${API_BASE_URL}/hls/status/${id}`);
@@ -332,7 +331,7 @@ export const getHLSStatus = async (id) => {
 
     const data = await response.json();
     
-    console.log(`[API] HLS Status - ${data.status}:`, {
+    logger.info(`[API] hls status - ${data.status}:`, {
       segments: data.segments_count,
       duration: data.total_duration,
       complete: data.is_complete,
@@ -340,7 +339,7 @@ export const getHLSStatus = async (id) => {
     
     return data;
   } catch (error) {
-    log.error('Get HLS status error', error);
+    logger.error('get hls status error', error);
     throw error;
   }
 };
@@ -351,7 +350,7 @@ export const getHLSStatus = async (id) => {
  */
 export const getPlaylistURL = (id) => {
   if (!id) {
-    throw new Error('HLS ID is required');
+    throw new Error('hls ID is required');
   }
   return `${API_BASE_URL}/hls/playlist/${id}`;
 };
@@ -363,7 +362,7 @@ export const getPlaylistURL = (id) => {
  */
 export const getSegmentURL = (id, segment) => {
   if (!id || !segment) {
-    throw new Error('HLS ID and segment name are required');
+    throw new Error('hls ID and segment name are required');
   }
   return `${API_BASE_URL}/hls/segments/${id}/${segment}`;
 };
@@ -374,7 +373,7 @@ export const getSegmentURL = (id, segment) => {
  */
 export const getCacheURL = (path) => {
   if (!path) {
-    throw new Error('Cache path is required');
+    throw new Error('cache path is required');
   }
   return `${API_BASE_URL}/cache/${path}`;
 };
@@ -388,11 +387,8 @@ export const getCacheURL = (path) => {
 export const waitForDownloadComplete = async (downloadId, maxWaitTime = 300000, pollInterval = 1000) => {
   try {
     if (!downloadId) {
-      throw new Error('Download ID is required');
-    }
-
-    console.log('[API] Aguardando arquivo ser criado:', downloadId);
-    
+      throw new Error('download ID is required');
+    }    
     const startTime = Date.now();
 
     return new Promise((resolve, reject) => {
@@ -402,26 +398,26 @@ export const waitForDownloadComplete = async (downloadId, maxWaitTime = 300000, 
           
           if (elapsedTime > maxWaitTime) {
             clearInterval(pollInterval_id);
-            reject(new Error(`Timeout: arquivo não encontrado após ${maxWaitTime / 1000}s`));
+            reject(new Error(`timeout: file not found ${maxWaitTime / 1000}s`));
             return;
           }
 
-          // Tentar obter status do download
+          // entar obter status do download
           const status = await getDownloadStatus(downloadId, false);
           
           if (status.ok) {
-            log.info('✓ Download file created', { name: status.name });
+            logger.info('download file created', { name: status.name });
             clearInterval(pollInterval_id);
             resolve(status);
           }
         } catch (error) {
-          // Se erro, continua tentando (arquivo ainda não foi criado)
-          log.debug('Waiting for download file', { error: error.message });
+          // se erro, continua tentando (arquivo ainda não foi criado)
+          logger.debug('waiting for download file', { error: error.message });
         }
       }, pollInterval);
     });
   } catch (error) {
-    log.error('Wait for download error', error);
+    logger.error('wait for download error', error);
     throw error;
   }
 };
@@ -433,26 +429,26 @@ export const waitForDownloadComplete = async (downloadId, maxWaitTime = 300000, 
  */
 export const startFullPipeline = async (magnetLink, downloadTimeout = 1800000) => {
   try {
-    console.log('[API] Starting pipeline: Download → Wait → HLS Conversion');
+    logger.info('starting pipeline: download → wait → hls conversion');
 
     if (!magnetLink) {
-      throw new Error('Magnet link is required');
+      throw new Error('magnet link is required');
     }
 
     // 1. Iniciar download
     const downloadResult = await startDownload(magnetLink);
     const downloadId = downloadResult.download_id;
-    console.log('[API] Download ID:', downloadId);
+    logger.info('download ID:', downloadId);
 
     // 2. Aguardar arquivo ser criado
-    console.log('[API] Esperando arquivo ser criado...');
+    logger.info('waiting for file to be created...');
     const downloadInfo = await waitForDownloadComplete(downloadId, downloadTimeout);
-    console.log('[API] Download info:', downloadInfo);
+    logger.info('download info:', downloadInfo);
 
     // 3. Iniciar conversão HLS com o downloadId
-    console.log('[API] Iniciando conversão HLS...');
+    logger.info('starting HLS conversion...');
     const hlsResult = await startHLSConversion(downloadId);
-    console.log('[API] HLS conversion started');
+    logger.info('HLS conversion started');
 
     // 4. Iniciar extração de legendas em paralelo (não bloqueia)
     startSubtitleExtractionBackground(downloadId);
@@ -465,7 +461,7 @@ export const startFullPipeline = async (magnetLink, downloadTimeout = 1800000) =
       downloadInfo,
     };
   } catch (error) {
-    console.error('[API] Pipeline error:', error);
+    logger.error('pipeline error:', error);
     throw error;
   }
 };
@@ -477,7 +473,7 @@ export const startFullPipeline = async (magnetLink, downloadTimeout = 1800000) =
  */
 export const extractSubtitles = async (torrentId) => {
   if (!torrentId) {
-    console.warn('[API] No torrent ID provided for extraction');
+    logger.warn('no torrent ID provided for extraction');
     return null;
   }
 
@@ -486,14 +482,14 @@ export const extractSubtitles = async (torrentId) => {
     const response = await fetch(url, { cache: 'no-store' });
     
     if (!response.ok) {
-      console.warn('[API] Subtitle extraction failed:', response.status);
+      logger.warn('subtitle extraction failed:', response.status);
       return null;
     }
 
     const data = await response.json();
     return data;
   } catch (error) {
-    console.warn('[API] Subtitle extraction error:', error.message);
+    logger.warn('subtitle extraction error:', error.message);
     return null;
   }
 };
@@ -505,7 +501,7 @@ export const extractSubtitles = async (torrentId) => {
  */
 export const fetchSubtitleMetadata = async (torrentId) => {
   if (!torrentId) {
-    console.warn('[API] No torrent ID provided for fetch');
+    logger.warn('no torrent ID provided for fetch');
     return null;
   }
 
@@ -514,7 +510,7 @@ export const fetchSubtitleMetadata = async (torrentId) => {
     const response = await fetch(url, { cache: 'no-store' });
 
     if (!response.ok) {
-      console.warn('[API] Failed to fetch subtitles:', response.status);
+      logger.warn('failed to fetch subtitles:', response.status);
       return null;
     }
 
@@ -528,7 +524,7 @@ export const fetchSubtitleMetadata = async (torrentId) => {
     
     return null;
   } catch (error) {
-    console.warn('[API] Subtitle fetch error:', error.message);
+    logger.warn('subtitle fetch error:', error.message);
     return null;
   }
 };
@@ -545,7 +541,7 @@ export const getSubtitleTemplate = async () => {
     }
     return null;
   } catch (error) {
-    console.warn('[API] Error loading subtitle template:', error.message);
+    logger.warn('error loading subtitle template:', error.message);
     return null;
   }
 };
@@ -559,8 +555,8 @@ export const startSubtitleExtractionBackground = (torrentId) => {
   
   fetch(`${API_BASE_URL}/streams/extract/${torrentId}`, { cache: 'no-store' })
     .then(r => r.json())
-    .then(() => console.log('[API] ✓ Subtitles extracted:', torrentId))
-    .catch(e => console.warn('[API] Background extraction failed:', e.message));
+    .then(() => logger.info('subtitles extracted:', torrentId))
+    .catch(e => logger.warn('background extraction failed:', e.message));
 };
 
 export default {

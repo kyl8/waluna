@@ -5,10 +5,8 @@ import Hls from 'hls.js';
 import { motion } from 'framer-motion';
 import artplayerPluginLibass from 'artplayer-plugin-libass';
 import { fetchSubtitleMetadata, getSubtitleTemplate } from '../../utils/api/waluna';
-import { Logger } from '../../utils/helpers/logger';
-
+import logger, { Logger } from '../../utils/helpers/logger';
 const log = new Logger('VideoPlayer');
-
 const MotionBox = motion(Box);
 
 const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
@@ -114,7 +112,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 		pollStableCountRef.current = 0;
 
 		poll();
-		statusPollRef.current = setInterval(poll, 10000); // 10s
+		statusPollRef.current = setInterval(poll, 10000); 
 	}, []);
 
 	const waitForHlsReady = useCallback(async (id, { timeout = 60000, interval = 1000 } = {}) => {
@@ -146,25 +144,24 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 			const statusUrl = `http://127.0.0.1:8080/hls/status/${id}`;
 			const count = await checkEndpoint(statusUrl);
 			if (count > 0) {
-				log.debug('HLS Ready', { segments: count });
+				log.debug('hls ready', { segments: count });
 				return true;
 			}
 
 			const playlistUrl = `http://127.0.0.1:8080/hls/playlist/${id}`;
 			const plCount = await checkEndpoint(playlistUrl);
 			if (plCount > 0) {
-				log.debug('HLS Ready', { segments: plCount });
+				log.debug('hls ready', { segments: plCount });
 				return true;
 			}
 
 			await new Promise(r => setTimeout(r, interval));
 		}
 
-		log.warn('HLS Ready timeout reached');
+		log.warn('hls timeout');
 		return false;
 	}, []);
 
-	// Carregar legendas do API
 	const loadSubtitles = useCallback(async (torrentId) => {
 		if (!torrentId) return null;
 
@@ -200,59 +197,53 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 			subtitleQueueRef.current = null;
 
 			try {
-			// Check if operation was aborted
 			if (subtitleAbortRef.current.signal.aborted) {
-				log.debug('Operation aborted');
+				log.debug('operation aborted');
 				loadingSubtitleRef.current = false;
 				return;
-			}				// Extra safety check for destroyed adapter
+			}				
 				if (!libassAdapterRef.current?.switch) {
 					loadingSubtitleRef.current = false;
 					return;
 				}
 
-				// Validate file exists and has content
 			try {
 				const headResponse = await fetch(urlToLoad, { method: 'HEAD' });
 				if (!headResponse.ok) {
-					log.warn('File not accessible', { url: urlToLoad, status: headResponse.status });
+					log.warn('file not accessible', { url: urlToLoad, status: headResponse.status });
 					loadingSubtitleRef.current = false;
 					return;
 				}
 				
 				const contentLength = headResponse.headers.get('content-length');
 				if (!contentLength || parseInt(contentLength) === 0) {
-					log.warn('File is empty or missing', { url: urlToLoad });
+					log.warn('file is empty or missing', { url: urlToLoad });
 					loadingSubtitleRef.current = false;
 					return;
 				}
 			} catch (checkError) {
-				log.warn('Cannot validate file', { url: urlToLoad, error: checkError.message });
+				log.warn('cannot validate file', { url: urlToLoad, error: checkError.message });
 				loadingSubtitleRef.current = false;
 				return;
-			}				// Longer delay to ensure worker is fully ready
+			}				
 				await new Promise(r => setTimeout(r, 300));
 				
-			// Check abort before proceeding
 			if (subtitleAbortRef.current.signal.aborted) {
-				log.debug('Operation aborted during delay');
+				log.debug('operation aborted during delay');
 				loadingSubtitleRef.current = false;
 				return;
 			}
-			// Triple-check adapter still exists after delay (critical!)
 			if (!libassAdapterRef.current || !libassAdapterRef.current.switch) {
-				log.warn('Adapter destroyed during load, aborting');
+				log.warn('adapter destroyed during load, aborting');
 				loadingSubtitleRef.current = false;
 				return;
 			}
-			
 			try {
 				libassAdapterRef.current.switch(urlToLoad);
 				libassAdapterRef.current.show?.();
-				log.info('✓ Injected');
+				log.info('injected');
 			} catch (switchError) {
-				log.error('Failed to switch subtitle', switchError);
-				// Try to recover by retrying after longer delay
+				log.error('failed to switch subtitle', switchError);
 				subtitleQueueRef.current = urlToLoad;
 				loadingSubtitleRef.current = false;
 				setTimeout(processQueue, 500);
@@ -304,11 +295,10 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 				}
 			});
 		} catch (error) {
-			log.warn('Selector error', { error: error.message });
+			log.warn('selector error', { error: error.message });
 		}
 	}, [loadSubtitleInPlayer]);
 
-	// Buscar template de legenda do backend
 	useEffect(() => {
 		const loadTemplate = async () => {
 			try {
@@ -317,7 +307,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 					setSubContentTemplate(template);
 				}
 			} catch (error) {
-				log.warn('Error loading subtitle template', { error: error.message });
+				log.warn('error loading subtitle template', { error: error.message });
 			}
 		};
 
@@ -331,7 +321,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 				try {
 					artInstanceRef.current.destroy(false);
 				} catch (e) {
-					log.error('Player destroy error', e);
+					log.error('player destroy error', e);
 				}
 			}
 			try { if (hlsRef.current) { try { hlsRef.current.destroy(); } catch(_) {} hlsRef.current = null; } } catch(_) {}
@@ -340,11 +330,9 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 			artInstanceRef.current = null;
 			playbackStuckAttemptsRef.current = 0;
 			initialSkipAttemptRef.current = 0;
-			// Clear subtitle queue and adapter when destroying
 			libassAdapterRef.current = null;
 			subtitleQueueRef.current = null;
 			loadingSubtitleRef.current = false;
-			// Abort any pending subtitle operations
 			subtitleAbortRef.current.abort();
 			subtitleAbortRef.current = new AbortController();
 		};
@@ -359,7 +347,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 		destroyPlayer();
 		setTimeout(() => {
 			if (!artRef.current) {
-				console.error('[Player] Container not found');
+				logger.error('[Player] Container not found');
 				return;
 			}
 			// evitar criar se já estiver criando/instanciado
@@ -373,9 +361,8 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
 			destroyPlayer();
 
 			if (hashToUse) {
-				// Just wait for HLS, legendas já estão extraídas
 				const ready = await waitForHlsReady(hashToUse, { timeout: 60000, interval: 1000 });
-				if (!ready) console.warn('[Player] HLS ready timeout');
+				if (!ready) logger.warn('[Player] HLS ready timeout');
 			}
 
 			try {
@@ -473,7 +460,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash }) => {
  											}
  										}
  									} catch (e) {
- 										console.warn('status fetch failed:', e.message);
+ 										logger.warn('status fetch failed:', e.message);
  									}
  									if (!currentDurationRef.current || currentDurationRef.current <= 0) {
  										if (currentDurationRef.current && currentDurationRef.current > 0) {
@@ -539,15 +526,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
  						setDisplayTotal(formatTime(currentDurationRef.current));
  						setDurationSeconds(currentDurationRef.current);
  					} catch (e) {
- 						console.warn('Early injection failed:', e.message);
+ 						logger.warn('Early injection failed:', e.message);
  					}
  				}
-			// LibASS Plugin Event Listeners
 			art.on('artplayerPluginLibass:init', async (adapter) => {
 				libassAdapterRef.current = adapter;
 				
 				if (hashToUse && adapter) {
-					// Apenas carrega legendas se for episódio novo
 					if (lastTorrentHashRef.current !== hashToUse) {
 						lastTorrentHashRef.current = hashToUse;
 						
@@ -558,12 +543,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 								const firstSub = subs[0];
 								if (firstSub.url) {
 									loadSubtitleInPlayer(art, firstSub.url);
-									console.log('[Subtitles] ✓ Injected');
+									logger.info('[Subtitles] injected');
 								}
 								createSubtitleSelector(art, subs);
 							}
 						} catch (error) {
-							console.warn('[Subtitles] Error:', error.message);
+							logger.warn('[Subtitles] error:', error.message);
 						}
 					}
 				}
@@ -578,7 +563,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 			art.on('ready', async () => {
 				try {
 					art.seek = 0;
-				} catch (e) { /* silent */ }
+				} catch (e) { [] }
 				if (hashToUse) startStatusPolling(hashToUse);
 				if (currentDurationRef.current) setDisplayTotal(formatTime(currentDurationRef.current));
 				setDisplayCurrent(formatTime(0));
@@ -591,7 +576,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 				creatingRef.current = false;
 			} catch (err) {
 				creatingRef.current = false;
-				console.error('[Player] Create error:', err.message);
+				logger.error('[Player] create error:', err.message);
 			}
 		};
 		return () => {

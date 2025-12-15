@@ -9,6 +9,7 @@ import SearchBar from './SearchBar';
 import SearchResultItem from './SearchResultItem'; 
 import AnimeDetailModal from '../modals/AnimeDetailModal'; 
 import { SearchResultSkeleton } from '../common/SkeletonLoading';
+import logger from '../../utils/helpers/logger.js';
 
 const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
   const [query, setQuery] = useState('');
@@ -24,7 +25,6 @@ const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
   const containerRef = useRef(null); 
   const [dropdownRect, setDropdownRect] = useState(null); 
   
-  // api context
   const { bestApi, apiStatus, isChecking, recheckApis } = useApi();
   useEffect(() => {
     if (!isDropdownOpen) {
@@ -36,7 +36,7 @@ const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
       if (!el) return setDropdownRect(null);
       const r = el.getBoundingClientRect();
       setDropdownRect({
-        left: Math.max(8, r.left), // small margin
+        left: Math.max(8, r.left), 
         top: r.bottom + window.scrollY,
         width: r.width
       });
@@ -148,7 +148,7 @@ const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
   }, []);
 
   const handleCloseAllModalsLocal = useCallback(() => {
-    console.log('[SearchContainer] Closing all modals and clearing search');
+    logger.info('[SearchContainer] Closing all modals and clearing search');
     // Limpar a busca
     setResults([]);
     setQuery('');

@@ -50,6 +50,7 @@ import {
 import { Global } from '@emotion/react';
 import AnimeCard from './AnimeCard';
 import ExpandedStatsSection from './ExpandedStatsSection';
+import logger from '../../utils/helpers/logger.js';
 
 // Mockando pra ver como fica
 const mockData = {
@@ -313,12 +314,12 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
   }, []);
 
   const handleSaveName = useCallback(() => {
-    console.log('Nome salvo:', name);
+    logger.info('Nome salvo:', name);
     setIsEditingName(false);
   }, [name]);
 
   const handlePhotoChange = useCallback(() => {
-    console.log('Foto alterada');
+    logger.log('Foto alterada');
   }, []);
 
   const memoizedStats = useMemo(() => (
@@ -376,14 +377,13 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
             w="100%"
             flexDirection={{ base: 'column', lg: 'row' }}
           >
-            {/* LEFT SIDE - Profile */}
             <VStack 
               spacing={3} 
               align="stretch" 
               w={{ base: '100%', lg: '40%' }} 
               minW={{ base: 'auto', lg: '280px' }}
             >
-              {/* Avatar */}
+
               <Box position="relative" alignSelf="center" mb={2} flexShrink={0}>
                 <Box
                   borderRadius="full"
@@ -407,7 +407,6 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
                 />
               </Box>
 
-              {/* Name */}
               {isEditingName ? (
                 <HStack spacing={2} flexShrink={0}>
                   <Input
@@ -438,7 +437,6 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
                 </HStack>
               )}
 
-              {/* Expanded Stats - Agrupados */}
               <Box flexShrink={0} w="100%">
                 <VStack spacing={3} align="stretch">
                   <Box>
@@ -473,10 +471,8 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
                 </VStack>
               </Box>
 
-              {/* Divider */}
               <Divider borderColor="whiteAlpha.300" my={2} flexShrink={0} />
 
-              {/* Gêneros Favoritos */}
               <Box flexShrink={0} w="100%">
                 <HStack spacing={2} mb={2}>
                   <Icon as={IoColorPalette} color="pink.300" fontSize="sm" />
@@ -495,10 +491,8 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
                 </VStack>
               </Box>
 
-              {/* Divider */}
               <Divider borderColor="whiteAlpha.300" my={2} flexShrink={0} />
 
-              {/* Badges / Conquistas */}
               <Box flexShrink={0} w="100%">
                 <HStack spacing={2} mb={2}>
                   <Icon as={IoMedal} color="green.300" fontSize="sm" />
@@ -511,10 +505,8 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
                 </VStack>
               </Box>
 
-              {/* Divider */}
               <Divider borderColor="whiteAlpha.300" my={2} flexShrink={0} />
 
-              {/* Meu Calendário */}
               <Box flexShrink={0} w="100%">
                 <HStack spacing={2} mb={2}>
                   <Icon as={IoCalendar} color="cyan.300" fontSize="sm" />
@@ -527,10 +519,8 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
                 </VStack>
               </Box>
 
-              {/* Divider */}
               <Divider borderColor="whiteAlpha.300" my={2} flexShrink={0} />
 
-              {/* Theme Toggle */}
               <Button
                 size="sm"
                 w="100%"
@@ -546,7 +536,6 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
               </Button>
             </VStack>
 
-            {/* Divider */}
             <Divider 
               orientation={{ base: 'horizontal', lg: 'vertical' }} 
               borderColor="whiteAlpha.300"
@@ -554,7 +543,6 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
               mx={{ base: 0, lg: 2 }}
             />
 
-            {/* RIGHT SIDE - Animes */}
             <VStack 
               spacing={4} 
               align="stretch" 
