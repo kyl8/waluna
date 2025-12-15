@@ -82,7 +82,7 @@ pub async fn start_download(RawQuery(query): RawQuery) -> Response {
     // Se o magnet estiver URL-encoded, decodifica automaticamente
     if magnet.contains('%') {
         magnet = decode_url(&magnet);
-        tracing::info!("🔓 DEPOIS de decodificar: '{}'", magnet);
+        tracing::info!("DEPOIS de decodificar: '{}'", magnet);
     }
     
     tracing::info!("🔗 Magnet link recebido no handler: {}", magnet);

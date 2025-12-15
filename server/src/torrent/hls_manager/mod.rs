@@ -76,13 +76,13 @@ impl HLSManager {
         
         // Criar diretório se não existir
         std::fs::create_dir_all(&output_dir)?;
-        info!("[HLS:{}] 📁 Diretório criado: {}", id, output_dir);
+        info!("[HLS:{}] Diretório criado: {}", id, output_dir);
         
         // Detectar duração do arquivo
         let duration = match Self::detect_duration(&input_file) {
             Ok(dur) => dur,
             Err(e) => {
-                warn!("[HLS:{}] ⚠️  Erro ao detectar duração: {}", id, e);
+                warn!("[HLS:{}] Erro ao detectar duração: {}", id, e);
                 0.0
             }
         };
@@ -120,7 +120,7 @@ impl HLSManager {
                 &output_dir_clone,
                 rx,
             ).await {
-                error!("[HLS:{}] 💥 Erro na conversão: {}", id_clone, e);
+                error!("[HLS:{}] Erro na conversão: {}", id_clone, e);
 
                 let manager = Self::get_manager().await;
                 let mut mgr = manager.write().await;
@@ -131,7 +131,7 @@ impl HLSManager {
         });
         
         info!(
-            "[HLS:{}] 🚀 Conversão iniciada\n  Entrada: {}\n  Duração: {:.2}s\n  Saída: {}",
+            "[HLS:{}] Conversão iniciada\n  Entrada: {}\n  Duração: {:.2}s\n  Saída: {}",
             id,
             input_file,
             duration,
@@ -151,7 +151,7 @@ impl HLSManager {
         let audio_codec_info = match Self::detect_audio_codec(input_file) {
             Ok(info) => info,
             Err(e) => {
-                warn!("[HLS:{}] ⚠️  Não foi possível detectar codec: {}", id, e);
+                warn!("[HLS:{}] Não foi possível detectar codec: {}", id, e);
                 AudioCodecInfo {
                     codec_name: "unknown".to_string(),
                     sample_rate: None,
@@ -196,7 +196,7 @@ impl HLSManager {
         };
 
         info!(
-            "[HLS:{}] 🎬 FFmpeg iniciando\n  Caminho: {}\n  Entrada: {}\n  Codec de áudio: {} (precisa conversão: {})\n  Saída: {}\n  Segmentos: {}",
+            "[HLS:{}] FFmpeg iniciando\n  Caminho: {}\n  Entrada: {}\n  Codec de áudio: {} (precisa conversão: {})\n  Saída: {}\n  Segmentos: {}",
             id,
             ffmpeg_path.display(),
             input_file,
@@ -260,7 +260,7 @@ impl HLSManager {
                             match status {
                                 Ok(exit) => {
                                     if exit.success() {
-                                        info!("[HLS:{}] ✅ Conversão completa", id);
+                                        info!("[HLS:{}] Conversão completa", id);
                                         let manager = Self::get_manager().await;
                                         let mut mgr = manager.write().await;
                                         if let Some(conv) = mgr.conversions.get_mut(id) {
@@ -269,7 +269,7 @@ impl HLSManager {
                                         }
                                         mgr.cancellations.remove(id);
                                     } else {
-                                        error!("[HLS:{}] ❌ Conversão finalizada com código: {}", id, exit);
+                                        error!("[HLS:{}] Conversão finalizada com código: {}", id, exit);
                                         let manager = Self::get_manager().await;
                                         let mut mgr = manager.write().await;
                                         if let Some(conv) = mgr.conversions.get_mut(id) {
@@ -279,13 +279,13 @@ impl HLSManager {
                                     }
                                 }
                                 Err(e) => {
-                                    error!("[HLS:{}] ⚠️  Erro ao aguardar processo FFmpeg: {}", id, e);
+                                    error!("[HLS:{}] Erro ao aguardar processo FFmpeg: {}", id, e);
                                 }
                             }
                             break; 
                         }
                         _ = &mut cancel_rx => {
-                            info!("[HLS:{}] 🛑 Cancel requested, killing ffmpeg process", id);
+                            info!("[HLS:{}] Cancel requested, killing ffmpeg process", id);
                             if let Err(e) = child.kill().await {
                                 error!("[HLS:{}] ❌ Falha ao matar processo FFmpeg: {}", id, e);
                             } else {
@@ -338,7 +338,7 @@ impl HLSManager {
                 }
             }
             Err(e) => {
-                error!("[HLS:{}] ⚠️  Erro ao executar FFmpeg: {}\n  Caminho: {}\n  Verifique se o arquivo existe: {}", id, e, ffmpeg_path.display(), input_file);
+                error!("[HLS:{}] Erro ao executar FFmpeg: {}\n  Caminho: {}\n  Verifique se o arquivo existe: {}", id, e, ffmpeg_path.display(), input_file);
             }
         }
         
@@ -350,7 +350,7 @@ impl HLSManager {
             conv.progress = None.unwrap_or(-1.0);
         }
         
-        info!("[HLS:{}] ✅ Status atualizado para 'cancelado'", id);
+        info!("[HLS:{}] Status atualizado para 'cancelado'", id);
         Ok(())
     }
 
@@ -427,11 +427,11 @@ impl HLSManager {
 
         if needs_conversion {
             warn!(
-                "⚠️  Codec de áudio não compatível detectado: {} | Será convertido para AAC",
+                "Codec de áudio não compatível detectado: {} | Será convertido para AAC",
                 codec_name
             );
         } else {
-            info!("✅ Codec de áudio compatível: {}", codec_name);
+            info!("Codec de áudio compatível: {}", codec_name);
         }
 
         Ok(codec_info)
@@ -460,7 +460,7 @@ impl HLSManager {
             project_root.join("ffmpeg/bin/ffprobe")
         };
 
-        debug!("⏱️  Detectando duração em: {}", input_file);
+        debug!("Detectando duração em: {}", input_file);
 
         let output = Command::new(&ffprobe_path)
             .args([
@@ -478,11 +478,11 @@ impl HLSManager {
 
         match duration_str.parse::<f64>() {
             Ok(duration) => {
-                info!("⏱️  Duração detectada: {:.2}s ({:.2}min)", duration, duration / 60.0);
+                info!("Duração detectada: {:.2}s ({:.2}min)", duration, duration / 60.0);
                 Ok(duration)
             }
             Err(_) => {
-                warn!("⚠️  Não foi possível detectar duração, usando valor padrão");
+                warn!("Não foi possível detectar duração, usando valor padrão");
                 Ok(0.0)
             }
         }
@@ -522,7 +522,7 @@ async fn serve_playlist(Path(id): Path<String>) -> Response {
             
             let modified_content = modified_lines.join("\n");
             
-            info!("[HLS:{}] 📡 Servindo playlist M3U8 com URLs reescritas e duration injetada no final: {:.2}s", id, duration);
+            info!("[HLS:{}] Servindo playlist M3U8 com URLs reescritas e duration injetada no final: {:.2}s", id, duration);
             debug!("[HLS:{}] Playlist reescrita:\n{}", id, modified_content);
             
             Response::builder()
@@ -533,7 +533,7 @@ async fn serve_playlist(Path(id): Path<String>) -> Response {
                 .unwrap()
         },
         Err(_) => {
-            error!("[HLS:{}] ❌ Playlist não encontrado", id);
+            error!("[HLS:{}] Playlist não encontrado", id);
             Response::builder()
                 .status(404)
                 .body("playlist not found".into())
@@ -546,7 +546,7 @@ async fn serve_segment(Path((id, segment)): Path<(String, String)>) -> Response 
     let path = format!("./cache/hls/{}/{}", id, segment);
     match fs::read(&path) {
         Ok(data) => {
-            debug!("[HLS:{}] 📹 Servindo segment: {}", id, segment);
+            debug!("[HLS:{}] Servindo segment: {}", id, segment);
             Response::builder()
                 .status(200)
                 .header("Content-Type", "video/MP2T")
@@ -555,7 +555,7 @@ async fn serve_segment(Path((id, segment)): Path<(String, String)>) -> Response 
                 .unwrap()
         },
         Err(_) => {
-            warn!("[HLS:{}] ⚠️  Segment não encontrado: {}", id, segment);
+            warn!("[HLS:{}] Segment não encontrado: {}", id, segment);
             Response::builder()
                 .status(404)
                 .body("segment not found".into())
@@ -613,11 +613,11 @@ async fn start_hls_conversion(
     
     let input_file = match input_file {
         Some(f) => {
-            info!("[HLS:{}] 📁 Arquivo encontrado: {}", id, f);
+            info!("[HLS:{}] Arquivo encontrado: {}", id, f);
             f
         },
         None => {
-            error!("[HLS:{}] ❌ Arquivo não encontrado", id);
+            error!("[HLS:{}] Arquivo não encontrado", id);
             
             // Listar arquivos disponíveis para debug
             let mut available_files = Vec::new();
@@ -630,7 +630,7 @@ async fn start_hls_conversion(
             }
             
             let error_msg = format!("Arquivo '{}' não encontrado em ./cache/downloads", id);
-            error!("[HLS:{}] 📂 Arquivos disponíveis: {:?}", id, available_files);
+            error!("[HLS:{}] Arquivos disponíveis: {:?}", id, available_files);
             return Ok(Json(serde_json::json!({
                 "ok": false,
                 "error": error_msg,
@@ -699,14 +699,14 @@ pub struct HLSStatusResponse {
 async fn get_hls_segments(Path(id): Path<String>) -> Response {
     use std::path::Path as StdPath;
     
-    info!("[HLS:{}] 📊 Requisição de status recebida", id);
+    info!("[HLS:{}] Requisição de status recebida", id);
     
     let hls_dir = format!("./cache/hls/{}", id);
     let hls_path = StdPath::new(&hls_dir);
     
     // Se o diretório não existe, tenta iniciar conversão
     if !hls_path.exists() {
-        info!("[HLS:{}] 📂 Diretório não encontrado, procurando arquivo para converter...", id);
+        info!("[HLS:{}] Diretório não encontrado, procurando arquivo para converter...", id);
         
         let downloads_dir = "./cache/downloads";
         let mut input_file = None;
@@ -737,14 +737,14 @@ async fn get_hls_segments(Path(id): Path<String>) -> Response {
         
         match input_file {
             Some(file) => {
-                info!("[HLS:{}] 🚀 Iniciando conversão automática", id);
+                info!("[HLS:{}] Iniciando conversão automática", id);
                 if let Err(e) = HLSManager::start_conversion(id.clone(), file).await {
                     error!("[HLS:{}] ❌ Erro ao iniciar conversão: {}", id, e);
                     return error_response(&id, 500, format!("Falha ao iniciar: {}", e));
                 }
                 
                 // Aguarda um pouco para segmentos começarem a ser criados
-                info!("[HLS:{}] ⏳ Aguardando criação de segmentos...", id);
+                info!("[HLS:{}] Aguardando criação de segmentos...", id);
                 tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
                 // Agora lista os segmentos criados
@@ -769,16 +769,16 @@ async fn list_hls_segments(id: &str) -> Response {
     let hls_dir = current_dir.join("cache/hls").join(id);
     let hls_dir_str = hls_dir.to_string_lossy().to_string();
     
-    debug!("[HLS:{}] 🔍 Procurando segmentos em: {}", id, hls_dir_str);
+    debug!("[HLS:{}] Procurando segmentos em: {}", id, hls_dir_str);
     
     // Le playlist
     let playlist_path = hls_dir.join("playlist.m3u8");
     let is_complete = if let Ok(content) = fs::read_to_string(&playlist_path) {
         let complete = content.contains("#EXT-X-ENDLIST");
-        debug!("[HLS:{}] 📋 Playlist encontrada, completo: {}", id, complete);
+        debug!("[HLS:{}] Playlist encontrada, completo: {}", id, complete);
         complete
     } else {
-        debug!("[HLS:{}] ⚠️  Playlist não encontrada em: {}", id, playlist_path.display());
+        debug!("[HLS:{}] Playlist não encontrada em: {}", id, playlist_path.display());
         false
     };
     
@@ -795,13 +795,13 @@ async fn list_hls_segments(id: &str) -> Response {
             }
         }
     } else {
-        warn!("[HLS:{}] ⚠️  Não foi possível ler diretório: {}", id, hls_dir_str);
+        warn!("[HLS:{}] Não foi possível ler diretório: {}", id, hls_dir_str);
     }
     
     segments.sort();
     let segments_count = segments.len();
 
-    info!("[HLS:{}] 📁 Total de segmentos encontrados: {}", id, segments_count);
+    info!("[HLS:{}] Total de segmentos encontrados: {}", id, segments_count);
 
     // Se não há segmentos e não existe uma conversão registrada para esse id,
     // provavelmente é uma pasta obsoleta/temporária em ./cache/hls. Evitar
@@ -810,7 +810,7 @@ async fn list_hls_segments(id: &str) -> Response {
         let manager = HLSManager::get_manager().await;
         let mgr = manager.read().await;
         if mgr.conversions.get(id).is_none() {
-            warn!("[HLS:{}] ⚠️  Diretório existe mas sem segmentos e sem conversão ativa — tratando como não encontrado", id);
+            warn!("[HLS:{}] Diretório existe mas sem segmentos e sem conversão ativa — tratando como não encontrado", id);
             return error_response(id, 404, "HLS não encontrado".to_string());
         }
         // Caso exista uma conversão em andamento, continuamos e retornamos 0 segmentos
@@ -843,7 +843,7 @@ async fn list_hls_segments(id: &str) -> Response {
     };
     
     info!(
-        "[HLS:{}] 📊 Status: {} | Segmentos: {} | Duração original: {:.2}s | Duração calculada: {:.0}s | Completo: {}",
+        "[HLS:{}] Status: {} | Segmentos: {} | Duração original: {:.2}s | Duração calculada: {:.0}s | Completo: {}",
         id,
         response.status,
         segments_count,
@@ -893,10 +893,10 @@ async fn stop_hls_conversion(Path(id): Path<String>) -> Result<Json<serde_json::
     if let Some(sender) = mgr.cancellations.remove(&id) {
         match sender.send(()) {
             Ok(_) => {
-                info!("[HLS:{}] 🛑 Cancelamento solicitado", id);
+                info!("[HLS:{}] Cancelamento solicitado", id);
             }
             Err(_) => {
-                warn!("[HLS:{}] ⚠️  Cancelamento já foi solicitado", id);
+                warn!("[HLS:{}] Cancelamento já foi solicitado", id);
             }
         }
 
@@ -980,7 +980,7 @@ async fn resume_hls_conversion(Path(id): Path<String>) -> Result<Json<serde_json
 async fn delete_cache(Path(id): Path<String>) -> Result<Json<serde_json::Value>, StatusCode> {
     use std::path::Path as StdPath;
 
-    info!("[HLS:{}] 🧹 Pedido de remoção de cache recebido", id);
+    info!("[HLS:{}] Pedido de remoção de cache recebido", id);
 
     let mut removed = Vec::new();
 
@@ -988,11 +988,11 @@ async fn delete_cache(Path(id): Path<String>) -> Result<Json<serde_json::Value>,
     if StdPath::new(&hls_dir).exists() {
         match std::fs::remove_dir_all(&hls_dir) {
             Ok(_) => {
-                info!("[HLS:{}] ✅ Diretório HLS removido: {}", id, hls_dir);
+                info!("[HLS:{}] Diretório HLS removido: {}", id, hls_dir);
                 removed.push("hls_dir".to_string());
             }
             Err(e) => {
-                error!("[HLS:{}] ❌ Falha ao remover diretório HLS: {} | Erro: {}", id, hls_dir, e);
+                error!("[HLS:{}] Falha ao remover diretório HLS: {} | Erro: {}", id, hls_dir, e);
                 return Ok(Json(serde_json::json!({
                     "ok": false,
                     "error": format!("Falha ao remover diretório hls: {}", e),
@@ -1001,18 +1001,18 @@ async fn delete_cache(Path(id): Path<String>) -> Result<Json<serde_json::Value>,
             }
         }
     } else {
-        debug!("[HLS:{}] ℹ️  Diretório HLS não existe: {}", id, hls_dir);
+        debug!("[HLS:{}] Diretório HLS não existe: {}", id, hls_dir);
     }
 
     let subtitle_dir = format!("./cache/subtitles/{}", id);
     if StdPath::new(&subtitle_dir).exists() {
         match std::fs::remove_dir_all(&subtitle_dir) {
             Ok(_) => {
-                info!("[HLS:{}] ✅ Diretório de legendas removido: {}", id, subtitle_dir);
+                info!("[HLS:{}] Diretório de legendas removido: {}", id, subtitle_dir);
                 removed.push("subtitle_dir".to_string());
             }
             Err(e) => {
-                error!("[HLS:{}] ❌ Falha ao remover diretório de legendas: {} | Erro: {}", id, subtitle_dir, e);
+                error!("[HLS:{}] Falha ao remover diretório de legendas: {} | Erro: {}", id, subtitle_dir, e);
                 return Ok(Json(serde_json::json!({
                     "ok": false,
                     "error": format!("Falha ao remover diretório de legendas: {}", e),
@@ -1021,7 +1021,7 @@ async fn delete_cache(Path(id): Path<String>) -> Result<Json<serde_json::Value>,
             }
         }
     } else {
-        debug!("[HLS:{}] ℹ️  Diretório de legendas não existe: {}", id, subtitle_dir);
+        debug!("[HLS:{}] Diretório de legendas não existe: {}", id, subtitle_dir);
     }
 
     let downloads_dir = "./cache/downloads";
@@ -1029,11 +1029,11 @@ async fn delete_cache(Path(id): Path<String>) -> Result<Json<serde_json::Value>,
     if StdPath::new(&direct_file).exists() && StdPath::new(&direct_file).is_file() {
         match std::fs::remove_file(&direct_file) {
             Ok(_) => {
-                info!("[HLS:{}] ✅ Arquivo removido: {}", id, direct_file);
+                info!("[HLS:{}] Arquivo removido: {}", id, direct_file);
                 removed.push("download_file_exact".to_string());
             }
             Err(e) => {
-                error!("[HLS:{}] ❌ Falha ao remover arquivo: {} | Erro: {}", id, direct_file, e);
+                error!("[HLS:{}] Falha ao remover arquivo: {} | Erro: {}", id, direct_file, e);
                 return Ok(Json(serde_json::json!({
                     "ok": false,
                     "error": format!("Falha ao remover arquivo de downloads: {}", e),
@@ -1050,14 +1050,14 @@ async fn delete_cache(Path(id): Path<String>) -> Result<Json<serde_json::Value>,
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                     if name.contains(&id) {
                         if let Err(e) = std::fs::remove_file(&path) {
-                            error!("[HLS:{}] ❌ Falha ao remover arquivo encontrado em downloads: {} | Erro: {}", id, path.display(), e);
+                            error!("[HLS:{}] Falha ao remover arquivo encontrado em downloads: {} | Erro: {}", id, path.display(), e);
                             return Ok(Json(serde_json::json!({
                                 "ok": false,
                                 "error": format!("Falha ao remover arquivo de downloads: {}", e),
                                 "id": id
                             })));
                         } else {
-                            info!("[HLS:{}] ✅ Arquivo removido (match parcial): {}", id, path.display());
+                            info!("[HLS:{}] Arquivo removido (match parcial): {}", id, path.display());
                             removed.push(format!("download_file:{}", name));
                         }
                     }
@@ -1069,12 +1069,12 @@ async fn delete_cache(Path(id): Path<String>) -> Result<Json<serde_json::Value>,
     let manager = HLSManager::get_manager().await;
     let mut mgr = manager.write().await;
     if mgr.conversions.remove(&id).is_some() {
-        info!("[HLS:{}] 🧾 Entrada de conversão removida do HLSManager", id);
+        info!("[HLS:{}] Entrada de conversão removida do HLSManager", id);
         removed.push("manager_entry".to_string());
     }
 
     if removed.is_empty() {
-        info!("[HLS:{}] ⚠️  Nenhum arquivo ou diretório removido (não encontrado)", id);
+        info!("[HLS:{}] Nenhum arquivo ou diretório removido (não encontrado)", id);
         return Ok(Json(serde_json::json!({
             "ok": false,
             "message": "Nenhum cache encontrado para o id",

@@ -71,7 +71,7 @@ impl Client {
         };
         options.peer_opts = Some(peer_opts);
         let session = Session::new_with_opts(downloads_dir.clone(), options).await?;
-        info!("✅ Sessão librqbit inicializada (DHT desativado, será ativado sob demanda)");
+        info!("Sessão librqbit inicializada (DHT desativado, será ativado sob demanda)");
 
         Ok(Self {
             session,
@@ -93,17 +93,17 @@ impl Client {
         debug!(download_id = %download_id, "Download ID gerado");
 
         // Adiciona download a session do librqbit (primeira tentativa sem DHT)
-        info!("[{}] ⏱️  Adicionando torrent ao librqbit (tentando sem DHT)...", download_id);
+        info!("[{}] Adicionando torrent ao librqbit (tentando sem DHT)...", download_id);
         let add_torrent = AddTorrent::from_url(magnet_url);
         
         let response = match self.session.add_torrent(add_torrent, None).await {
             Ok(resp) => {
-                info!("[{}] ✅ Torrent adicionado com sucesso (sem DHT)", download_id);
+                info!("[{}] Torrent adicionado com sucesso (sem DHT)", download_id);
                 resp
             }
             Err(e) => {
                 // Se falhou sem DHT, criar nova sessão COM DHT e tentar novamente
-                warn!("[{}] ⚠️  Falha sem DHT: '{}'. Ativando DHT e tentando novamente...", download_id, e);
+                warn!("[{}] Falha sem DHT: '{}'. Ativando DHT e tentando novamente...", download_id, e);
                 
                 let downloads_dir = PathBuf::from("./cache/downloads");
                 let mut dht_options = SessionOptions::default();
@@ -117,7 +117,7 @@ impl Client {
                 };
                 dht_options.peer_opts = Some(peer_opts);
                 
-                info!("[{}] 🌐 Criando nova sessão com DHT...", download_id);
+                info!("[{}] Criando nova sessão com DHT...", download_id);
                 let dht_session = Session::new_with_opts(downloads_dir, dht_options).await?;
                 let add_torrent_retry = AddTorrent::from_url(magnet_url);
                 
@@ -128,11 +128,11 @@ impl Client {
                         *dht_sess = Some(dht_session);
                         drop(dht_sess);  // Liberar o lock
                         
-                        info!("[{}] ✅ Torrent adicionado COM DHT em {:.2}s", download_id, start_time.elapsed().as_secs_f64());
+                        info!("[{}] Torrent adicionado COM DHT em {:.2}s", download_id, start_time.elapsed().as_secs_f64());
                         resp
                     }
                     Err(e2) => {
-                        error!("[{}] ❌ Falhas em ambas tentativas - Sem DHT: '{}', Com DHT: '{}'", download_id, e, e2);
+                        error!("[{}] Falhas em ambas tentativas - Sem DHT: '{}', Com DHT: '{}'", download_id, e, e2);
                         return Err(anyhow::anyhow!("Falha sem DHT: {}. Falha com DHT: {}", e, e2));
                     }
                 }
@@ -161,7 +161,7 @@ impl Client {
                     if let Some(metadata) = handle.metadata.load_full() {
                         if let Some(torrent_name) = &metadata.name {
                             name = torrent_name.clone();
-                            info!(download_id = %download_id, "📁 Nome do torrent obtido: {}", name);
+                            info!(download_id = %download_id, "Nome do torrent obtido: {}", name);
                             break;
                         }
                     }
@@ -215,7 +215,7 @@ impl Client {
         let downloads = self.active_downloads.clone();
         let session = self.session.clone();
         
-        info!(download_id = %download_id, "🔄 Iniciando monitoramento de progresso");
+        info!(download_id = %download_id, "Iniciando monitoramento de progresso");
 
         tokio::spawn(async move {
             let mut file_renamed = false;
@@ -239,10 +239,10 @@ impl Client {
                                     match Self::rename_download_file_with_session(&session, torrent_id, &download_id, &torrent_name).await {
                                         Ok(_) => {
                                             file_renamed = true;
-                                            info!(download_id = %download_id, "📝 Tentativa de renomear concluída");
+                                            info!(download_id = %download_id, "Tentativa de renomear concluída");
                                         }
                                         Err(e) => {
-                                            warn!(download_id = %download_id, error = %e, "⚠️  Erro ao renomear arquivo");
+                                            warn!(download_id = %download_id, error = %e, "Erro ao renomear arquivo");
                                         }
                                     }
                                 }
@@ -254,29 +254,29 @@ impl Client {
                                         progress = format!("{:.1}%", active_dl.info.progress),
                                         speed = format!("{:.2} MB/s", active_dl.info.download_speed as f64 / 1_000_000.0),
                                         elapsed = format!("{:.0}s", start.elapsed().as_secs_f64()),
-                                        "📊 Progresso do download"
+                                        "Progresso do download"
                                     );
                                 }
                                 
                                 if active_dl.info.progress >= 100.0 {
                                     active_dl.info.status = "completed".to_string();
-                                    info!(download_id = %download_id, total_time = format!("{:.2}s", start.elapsed().as_secs_f64()), "✅ Download completo");
+                                    info!(download_id = %download_id, total_time = format!("{:.2}s", start.elapsed().as_secs_f64()), "Download completo");
                                     false
                                 } else if active_dl.info.progress == 0.0 && start.elapsed().as_secs() > 30 {
-                                    warn!(download_id = %download_id, elapsed = format!("{:.0}s", start.elapsed().as_secs_f64()), "⏳ Ainda aguardando metadata/peers (30+ segundos)");
+                                    warn!(download_id = %download_id, elapsed = format!("{:.0}s", start.elapsed().as_secs_f64()), "Ainda aguardando metadata/peers (30+ segundos)");
                                     true
                                 } else {
                                     true
                                 }
                             }
                             Err(e) => {
-                                error!(download_id = %download_id, error = %e, "❌ Erro ao atualizar");
+                                error!(download_id = %download_id, error = %e, "Erro ao atualizar");
                                 active_dl.info.status = "error".to_string();
                                 false
                             }
                         }
                     } else {
-                        warn!(download_id = %download_id, "⚠️  Download não encontrado");
+                        warn!(download_id = %download_id, "Download não encontrado");
                         false
                     }
                 };
@@ -374,7 +374,7 @@ impl Client {
         debug!(
             download_speed = download_speed,
             upload_speed = upload_speed,
-            "📊 Velocidades calculadas"
+            "Velocidades calculadas"
         );
 
         // ETA: calcula baseado na velocidade de download
@@ -384,7 +384,7 @@ impl Client {
             debug!(
                 remaining_bytes = remaining_bytes,
                 eta_secs = eta_secs,
-                "⏱️  ETA calculado"
+                "ETA calculado"
             );
             Some(eta_secs)
         } else {
@@ -407,7 +407,7 @@ impl Client {
     // Consulta o progresso de um download ativo q esta dentro do vetor active_downloads, se n tiver la, retorna erro, é basicamente um getter e util pra ver o progresso
     #[tracing::instrument(skip(self))]
     pub async fn get_progress(&self, download_id: &str) -> Result<DownloadInfo> {
-        debug!(download_id = %download_id, "📊 Consultando progresso");
+        debug!(download_id = %download_id, "Consultando progresso");
         
         // Força atualização dos valores do vetor DownloadInfo antes de retornar 
         {
@@ -421,7 +421,7 @@ impl Client {
                     let dht_sess = self.dht_session.read().await;
                     if let Some(dht_session) = dht_sess.as_ref() {
                         if let Ok(()) = Self::update_torrent_info_static(dht_session, active_dl.torrent_id, active_dl).await {
-                            debug!(download_id = %download_id, "📊 Atualização com DHT session bem-sucedida");
+                            debug!(download_id = %download_id, "Atualização com DHT session bem-sucedida");
                             return downloads
                                 .get(download_id)
                                 .map(|dl| dl.info.clone())
@@ -448,7 +448,7 @@ impl Client {
     // Auto-explicativo: so faz um map no vetor active_downloads e retorna um vetor com as infos
     #[tracing::instrument(skip(self))]
     pub async fn list_downloads(&self) -> Vec<DownloadInfo> {
-        debug!("📋 Listando downloads");
+        debug!("Listando downloads");
         let downloads = self.active_downloads.read().await;
         let list: Vec<DownloadInfo> = downloads.values().map(|dl| dl.info.clone()).collect();
         info!(count = list.len(), "Total de downloads");
@@ -466,7 +466,7 @@ impl Client {
             self.session
                 .delete(TorrentIdOrHash::Id(active_dl.torrent_id), false)
                 .await?;
-            info!(download_id = %download_id, "⏹️  Download parado");
+            info!(download_id = %download_id, "Download parado");
             Ok(())
         } else {
             warn!(download_id = %download_id, "Download não encontrado");
@@ -493,11 +493,11 @@ impl Client {
         
         let downloads_dir = PathBuf::from("./cache/downloads");
         
-        info!(download_id = %download_id, torrent_name = %torrent_name, "🔍 Procurando arquivo do torrent para renomear");
+        info!(download_id = %download_id, torrent_name = %torrent_name, "Procurando arquivo do torrent para renomear");
         
         // Verificar se diretório existe
         if !downloads_dir.exists() {
-            warn!(dir = ?downloads_dir, "📁 Diretório não existe");
+            warn!(dir = ?downloads_dir, "Diretório não existe");
             return Ok(());
         }
         
@@ -508,7 +508,7 @@ impl Client {
                 if let Some(filename) = path.file_name() {
                     let name = filename.to_string_lossy().to_string();
                     if name.starts_with(download_id) && path.is_file() {
-                        info!(download_id = %download_id, existing_file = %name, "✅ Arquivo já existe com download_id");
+                        info!(download_id = %download_id, existing_file = %name, "Arquivo já existe com download_id");
                         return Ok(());
                     }
                 }
@@ -527,7 +527,7 @@ impl Client {
                         // Verificar se é o arquivo do torrent (comparar nome)
                         // Pode ser o nome exato ou começar com o nome (em caso de extensões diferentes)
                         if name == torrent_name || name.starts_with(&torrent_name) {
-                            info!(download_id = %download_id, torrent_name = %torrent_name, found_file = %name, "🎯 Arquivo do torrent encontrado");
+                            info!(download_id = %download_id, torrent_name = %torrent_name, found_file = %name, "Arquivo do torrent encontrado");
                             
                             // Extrair extensão do arquivo original
                             let extension = path
@@ -544,7 +544,7 @@ impl Client {
                             
                             let new_path = downloads_dir.join(&new_filename);
                             
-                            info!(download_id = %download_id, old_file = %name, new_file = %new_filename, "🔀 Tentando renomear...");
+                            info!(download_id = %download_id, old_file = %name, new_file = %new_filename, "Tentando renomear...");
                             
                             // Tenta renomar o arquivo
                             match fs::rename(&path, &new_path) {
@@ -554,7 +554,7 @@ impl Client {
                                         old_name = %name,
                                         new_name = %new_filename,
                                         extension = %extension,
-                                        "✅ Arquivo renomeado com sucesso!"
+                                        "Arquivo renomeado com sucesso!"
                                     );
                                     return Ok(());
                                 }
@@ -563,7 +563,7 @@ impl Client {
                                         download_id = %download_id,
                                         old_name = %name,
                                         error = %e,
-                                        "❌ Falha ao renomear arquivo"
+                                        "Falha ao renomear arquivo"
                                     );
                                     return Err(e.into());
                                 }
@@ -574,7 +574,7 @@ impl Client {
             }
         }
         
-        warn!(download_id = %download_id, torrent_name = %torrent_name, "⚠️  Arquivo do torrent não encontrado na pasta downloads");
+        warn!(download_id = %download_id, torrent_name = %torrent_name, "Arquivo do torrent não encontrado na pasta downloads");
         Ok(())
     }
 }

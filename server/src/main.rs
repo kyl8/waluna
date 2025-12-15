@@ -42,9 +42,9 @@ async fn main() -> anyhow::Result<()> {
     // Listener TCP
     let listener = tokio::net::TcpListener::bind(addr).await?;
     
-    tracing::info!("🚀 Servidor rodando em http://{}/", addr);
-    tracing::info!("✅ Stream Manager rodando em http://{}/streams/", addr);
-    tracing::info!("✅ HLS Manager rodando em http://{}/hls/", addr);
+    tracing::info!("Servidor rodando em http://{}/", addr);
+    tracing::info!("Stream Manager rodando em http://{}/streams/", addr);
+    tracing::info!("HLS Manager rodando em http://{}/hls/", addr);
 
     // Inicia o servidor
     axum::serve(listener, app).await?;
