@@ -1,6 +1,7 @@
 // simple cache system with TTL and LRU eviction
 // supports basic operations like set, get, has, delete, and clear
 // uses a Map to store items with their expiration time and access order 
+
 import React from 'react';
 
 const DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
@@ -42,6 +43,7 @@ class CacheStore {
       if (idx > -1) this.accessOrder.splice(idx, 1);
       return null;
     }
+
     // move to end of access order
     // to mark it as recently used
     const idx = this.accessOrder.indexOf(key);

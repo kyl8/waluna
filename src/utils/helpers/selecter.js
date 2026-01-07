@@ -9,7 +9,6 @@ const pendingWorkerResponses = new Map();
 function initWorker() {
   if (fuseWorker) return;
   try {
-    // worker is located at src/workers/fuse.worker.js — from src/utils/helpers/selecter.js
     fuseWorker = new Worker(new URL('../../workers/fuse.worker.js', import.meta.url));
     fuseWorker.onmessage = (ev) => {
       const { id, results, error } = ev.data || {};
@@ -20,7 +19,6 @@ function initWorker() {
       resolver(results || []);
     };
   } catch (e) {
-    logger.warn('Could not initialize fuse worker, falling back to main thread', e);
     fuseWorker = null;
   }
 }

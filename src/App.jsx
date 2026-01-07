@@ -2,11 +2,13 @@ import React, { useState, useCallback } from 'react';
 import { Box, Flex, useBreakpointValue } from '@chakra-ui/react';
 import { Global } from '@emotion/react';
 import { ApiProvider } from './contexts/ApiContext';
-import { Navbar, SearchContainer, VideoPlayer, PlayerControls, ConfigModal } from './components';
+import { Navbar, SearchContainer, VideoPlayer, ConfigModal } from './components';
 
 function App() {
   const [isFavorited, setIsFavorited] = useState(false);
   const [playingTorrentHash, setPlayingTorrentHash] = useState(null);
+  const [playingVideoUrl, setPlayingVideoUrl] = useState(null);
+  const [streamMetadata, setStreamMetadata] = useState([]);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
   const user = { name: 'kyl', photoUrl: 'https://i.pinimg.com/736x/a9/bc/64/a9bc64837740124cd0ffeeef4c8de068.jpg' };
@@ -23,8 +25,9 @@ function App() {
   }, []);
 
   const handlePlayTorrent = useCallback((torrent) => {
-    console.log('[App] Playing torrent:', torrent.filename);
-    setPlayingTorrentHash(torrent.hlsId || torrent.downloadId);
+    setPlayingTorrentHash(torrent.hlsId || torrent.downloadId || null);
+    setPlayingVideoUrl(torrent.videoUrl || null);
+    setStreamMetadata(torrent.streamMetadata || []);
   }, []);
 
   const handleSettingsClick = useCallback(() => {
@@ -34,7 +37,7 @@ function App() {
   const handleConfigModalClose = useCallback(() => {
     setIsConfigModalOpen(false);
   }, []);
-  
+
   return (
     <ApiProvider>
       <Global
@@ -53,14 +56,13 @@ function App() {
         `}
       />
 
-      <Flex 
-        direction="column" 
-        bg="#111111" 
-        minHeight="100vh" 
-        color="gray.100"
-      >
+    <Flex 
+      direction="column" 
+      bg="#111111" 
+      minHeight="100vh" 
+      color="gray.100"
+    >
         <Navbar userName={user.name} userPhotoUrl={user.photoUrl} onSettingsClick={handleSettingsClick} />
-
         <Flex
           as="main"
           direction="column"
@@ -74,33 +76,31 @@ function App() {
             overflow: 'auto'
           }}
         >
+          
           <Box mb={{ base: 6, md: 8 }} w="100%">
-            <SearchContainer 
-              onCloseAllModals={handleCloseAllModals}
-              onPlayTorrent={handlePlayTorrent}
-            />
+              <SearchContainer 
+                onCloseAllModals={handleCloseAllModals}
+                onPlayTorrent={handlePlayTorrent}
+              />
           </Box>
 
           <Box mb={{ base: 6, md: 8 }} w="100%">
-            <VideoPlayer 
-              videoUrl="" 
-              posterUrl={posterUrl} 
-              torrentHash={playingTorrentHash}
-            />
-          </Box>
-
-          <Box mb={{ base: 6, md: 8 }} w="100%">
-            <PlayerControls isFavorited={isFavorited} onFavoriteToggle={handleFavoriteToggle} />
+              <VideoPlayer 
+                videoUrl={playingVideoUrl} 
+                posterUrl={posterUrl} 
+                torrentHash={playingTorrentHash}
+                streamMetadata={streamMetadata || []}
+              />
           </Box>
         </Flex>
 
-        <ConfigModal 
+      <ConfigModal 
           isOpen={isConfigModalOpen} 
-          onClose={handleConfigModalClose}
+        onClose={handleConfigModalClose}
           userName={user.name}
           userPhotoUrl={user.photoUrl}
-        />
-      </Flex>
+      />
+    </Flex>
     </ApiProvider>
   );
 }

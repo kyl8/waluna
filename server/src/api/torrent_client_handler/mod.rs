@@ -77,7 +77,7 @@ pub async fn start_download(RawQuery(query): RawQuery) -> Response {
             .unwrap();
     }
     
-    tracing::info!("🔍 ANTES de decodificar: '{}'", magnet);
+    tracing::info!("ANTES de decodificar: '{}'", magnet);
     
     // Se o magnet estiver URL-encoded, decodifica automaticamente
     if magnet.contains('%') {

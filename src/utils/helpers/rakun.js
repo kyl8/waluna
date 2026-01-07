@@ -5,6 +5,9 @@ import rakun from "@lowlighter/rakun"
 // thanks to @lowlighter for the rakun library!
 // thanks to @cijiugechu for the nyaa-si library!
 
+
+// TODO: improve this using some fuzzy matching algorithm to better match anime and torrent names
+
 export async function parse_nyaa(name) {
     const info = await fetch(`http://127.0.0.1:8080/search?&q=${name}&pretty=1`)
     return info.json()
@@ -44,50 +47,45 @@ const parseDate = (dateString) => {
 const sanitize = (str) => {
     return str
         .toLowerCase()
-        .replace(/[^\w\s]/g, ' ')  
-        .split(/[\s]+/)             
+        .replace(/[^\w\s]/g, ' ')
+        .split(/[\s]+/)
         .filter(w => w.length > 0)
-        .join(' ');                 
+        .join(' ');
 };
 
 export async function format_rakun(name) {
     const sanitizedName = sanitize(name);
-    // console.log(`[format_rakun] Starting search for: "${name}" (sanitized: "${sanitizedName}")`);
     let rakun_parsed_info = []
     
     try {
         const info = await parse_nyaa(sanitizedName)
-        // console.log(`[format_rakun] Nyaa API returned ${info.results?.length || 0} results`);
         
         info.results.forEach((element, idx) => {
             const parsed = rakun.parse(element.title || name);
 
-        // parse sizes like "GB(6.78)" or "6.78 GB" into value/unit/bytes
         const parseSize = (s) => {
             if (!s) return undefined;
             const str = String(s).trim();
             let unit, value;
 
-            // match "GB(6.78)" or "MiB(123.4)"
             let m = str.replace(/\s+/g, "").match(/^([KMGTPE]?i?B)\(([\d.,]+)\)$/i);
             if (m) {
-            unit = m[1].toUpperCase();
-            value = parseFloat(m[2].replace(",", "."));
+                unit = m[1].toUpperCase();
+                value = parseFloat(m[2].replace(",", "."));
             } else {
-            // match "6.78 GB" or "6.78GB"
-            m = str.match(/^([\d.,]+)\s*([KMGTPE]?i?B)$/i);
-            if (!m) return undefined;
-            value = parseFloat(m[1].replace(",", "."));
-            unit = m[2].toUpperCase();
+                m = str.match(/^([\d.,]+)\s*([KMGTPE]?i?B)$/i);
+                if (!m) return undefined;
+                value = parseFloat(m[1].replace(",", "."));
+                unit = m[2].toUpperCase();
             }
 
-            const isBinary = unit.endsWith("IB"); // KiB, MiB, GiB
-            const normalizedUnit = isBinary ? unit.replace("IB", "B") : unit; // KiB -> KB
+            const isBinary = unit.endsWith("IB");
+            const normalizedUnit = isBinary ? unit.replace("IB", "B") : unit;
             const exp = { B: 0, KB: 1, MB: 2, GB: 3, TB: 4, PB: 5, EB: 6 }[normalizedUnit] ?? 0;
             const base = isBinary ? 1024 : 1000;
             const bytes = Math.round(value * Math.pow(base, exp));
             return { value, unit: normalizedUnit, bytes };
-        };
+        }; 
 
         const sizeParsed = parseSize(element.size);
         const dateParsed = parseDate(element.date);
@@ -133,8 +131,7 @@ export async function format_rakun(name) {
         }));
     });
         
-        // console.log(`[format_rakun] Finished parsing ${rakun_parsed_info.length} torrents`);
-    return rakun_parsed_info;
+    return rakun_parsed_info; 
     } catch (error) {
         // console.error(`[format_rakun] Error:`, error);
         return [];
@@ -143,53 +140,34 @@ export async function format_rakun(name) {
 
 export async function filterTorrents(animeName, episodeNumber, seasonNumber = 1) {
     const sanitizedAnimeName = sanitize(animeName);
-    // console.log(`[filterTorrents] Input - Anime: "${animeName}", Season: ${seasonNumber}, Episode: ${episodeNumber}`);
-    // console.log(`[filterTorrents] Sanitized - Anime: "${sanitizedAnimeName}"`);
 
     try {
         const allTorrents = await format_rakun(sanitizedAnimeName);
-        // console.log(`[filterTorrents] Got ${allTorrents.length} torrents from format_rakun`);
 
         if (!allTorrents || allTorrents.length === 0) {
-            // console.warn(`[filterTorrents] No torrents found`);
             return { matches: [], partialMatches: [] };
         }
 
-        const episodeNum = String(parseInt(episodeNumber));
-        const seasonNum = String(parseInt(seasonNumber));
-        // console.log(`[filterTorrents] LOOKING FOR: Season ${seasonNum}, Episode ${episodeNum}`);
+        const episodeNum = parseInt(episodeNumber, 10);
+        const seasonNum = String(parseInt(seasonNumber, 10));
         
         const animeWords = sanitizedAnimeName.split(' ').filter(w => w.length > 2);
-        // console.log(`[filterTorrents] Anime words (filtered):`, animeWords);
         
         const partialMatches = [];
         const filtered = allTorrents.filter((torrent, idx) => {
             const torrentFilename = (torrent.filename || '').toLowerCase();
             const torrentName = (torrent.name || '').toLowerCase();
-            const torrentEpisode = torrent.episode ? String(parseInt(torrent.episode)) : null;
-            const torrentSeason = torrent.season ? String(parseInt(torrent.season)) : '1';
+            const torrentEpisode = torrent.episode ? parseInt(torrent.episode, 10) : null;
+            const torrentSeason = torrent.season ? String(parseInt(torrent.season, 10)) : '1';
             
             const matchingWordsFilename = animeWords.filter(word => torrentFilename.includes(word));
             const matchingWordsName = animeWords.filter(word => torrentName.includes(word));
             const totalMatching = new Set([...matchingWordsFilename, ...matchingWordsName]);
             
-            const nameMatch = totalMatching.size >= Math.max(1, Math.ceil(animeWords.length * 0.4));
+            const nameMatch = torrentFilename.includes(sanitizedAnimeName) || torrentName.includes(sanitizedAnimeName) || totalMatching.size >= Math.max(1, Math.floor(animeWords.length * 0.2));
             
             const episodeMatch = torrentEpisode === episodeNum;
             const seasonMatch = torrentSeason === seasonNum;
-
-            // Log for debugging
-            if (totalMatching.size > 0 || (episodeMatch && seasonMatch)) {
-                // console.log(`[filterTorrents] Checking: "${torrent.filename.substring(0, 60)}..."`, {
-                //     words: animeWords,
-                //     matched: Array.from(totalMatching),
-                //     matches: totalMatching.size,
-                //     threshold: Math.max(1, Math.ceil(animeWords.length * 0.4)),
-                //     season: torrentSeason,
-                //     episode: torrentEpisode,
-                //     checks: { nameMatch, seasonMatch, episodeMatch }
-                // });
-            }
             
             if (nameMatch && episodeMatch && !seasonMatch) {
                 partialMatches.push({
@@ -201,71 +179,56 @@ export async function filterTorrents(animeName, episodeNumber, seasonNumber = 1)
                 partialMatches.push({
                     type: 'NAME+SEASON',
                     torrent: torrent,
-                    reason: `Episode: got "${torrentEpisode}", want "${episodeNum}"`
+                    reason: `Episode: got "${torrentEpisode ?? 'unknown'}", want "${String(episodeNum)}"`
                 });
             }
             
             return nameMatch && seasonMatch && episodeMatch;
         });
 
-        // console.log(`[filterTorrents] ⭐ RESULT: Found ${filtered.length} FULL matches`);
-        
-        // Fallback 1: if no matches found, try without season filter
         if (filtered.length === 0) {
-            // console.log(`[filterTorrents] ⚠️ No matches found! Trying fallback 1: without season filter...`);
-            
             const fallbackFiltered = allTorrents.filter((torrent) => {
                 const torrentFilename = (torrent.filename || '').toLowerCase();
                 const torrentName = (torrent.name || '').toLowerCase();
-                const torrentEpisode = torrent.episode ? String(parseInt(torrent.episode)) : null;
+                const torrentEpisode = torrent.episode ? parseInt(torrent.episode, 10) : null;
                 
                 const matchingWordsFilename = animeWords.filter(word => torrentFilename.includes(word));
                 const matchingWordsName = animeWords.filter(word => torrentName.includes(word));
                 const totalMatching = new Set([...matchingWordsFilename, ...matchingWordsName]);
                 
-                const nameMatch = totalMatching.size >= Math.max(1, Math.ceil(animeWords.length * 0.4));
+                const nameMatch = torrentFilename.includes(sanitizedAnimeName) || torrentName.includes(sanitizedAnimeName) || totalMatching.size >= Math.max(1, Math.floor(animeWords.length * 0.2));
                 const episodeMatch = torrentEpisode === episodeNum;
                 
                 return nameMatch && episodeMatch;
             });
-            
-            // console.log(`[filterTorrents] 🔄 Fallback 1 found ${fallbackFiltered.length} matches without season filter`);
             
             if (fallbackFiltered.length > 0) {
                 return { matches: fallbackFiltered, partialMatches };
             }
         }
 
-        // Fallback 2: if still no matches, try without episode filter (for movies)
         if (filtered.length === 0) {
-            // console.log(`[filterTorrents] ⚠️ Still no matches! Trying fallback 2: without episode filter (movies)...`);
-            
             const fallbackFiltered2 = allTorrents.filter((torrent) => {
                 const torrentFilename = (torrent.filename || '').toLowerCase();
                 const torrentName = (torrent.name || '').toLowerCase();
-                const torrentSeason = torrent.season ? String(parseInt(torrent.season)) : '1';
+                const torrentSeason = torrent.season ? String(parseInt(torrent.season, 10)) : '1';
                 
                 const matchingWordsFilename = animeWords.filter(word => torrentFilename.includes(word));
                 const matchingWordsName = animeWords.filter(word => torrentName.includes(word));
                 const totalMatching = new Set([...matchingWordsFilename, ...matchingWordsName]);
                 
-                const nameMatch = totalMatching.size >= Math.max(1, Math.ceil(animeWords.length * 0.4));
+                const nameMatch = torrentFilename.includes(sanitizedAnimeName) || torrentName.includes(sanitizedAnimeName) || totalMatching.size >= Math.max(1, Math.floor(animeWords.length * 0.2));
                 const seasonMatch = torrentSeason === seasonNum;
                 
                 return nameMatch && seasonMatch;
             });
-            
-            // console.log(`[filterTorrents] 🔄 Fallback 2 found ${fallbackFiltered2.length} matches without episode filter`);
             
             if (fallbackFiltered2.length > 0) {
                 return { matches: fallbackFiltered2, partialMatches };
             }
         }
 
-        // Fallback 3: name match only (for movies without season/episode)
         if (filtered.length === 0) {
-            // console.log(`[filterTorrents] ⚠️ Fallback 3: name match only (movies)...`);
-            
             const fallbackFiltered3 = allTorrents.filter((torrent) => {
                 const torrentFilename = (torrent.filename || '').toLowerCase();
                 const torrentName = (torrent.name || '').toLowerCase();
@@ -274,12 +237,11 @@ export async function filterTorrents(animeName, episodeNumber, seasonNumber = 1)
                 const matchingWordsName = animeWords.filter(word => torrentName.includes(word));
                 const totalMatching = new Set([...matchingWordsFilename, ...matchingWordsName]);
                 
-                const nameMatch = totalMatching.size >= Math.max(1, Math.ceil(animeWords.length * 0.4));
+                const nameMatch = torrentFilename.includes(sanitizedAnimeName) || torrentName.includes(sanitizedAnimeName) || totalMatching.size >= Math.max(1, Math.floor(animeWords.length * 0.2));
                 
                 return nameMatch;
             });
             
-            // console.log(`[filterTorrents] 🔄 Fallback 3 found ${fallbackFiltered3.length} matches (name only)`);
             if (fallbackFiltered3.length > 0) {
                 return { matches: fallbackFiltered3, partialMatches };
             }
@@ -287,13 +249,6 @@ export async function filterTorrents(animeName, episodeNumber, seasonNumber = 1)
 
         return { matches: filtered, partialMatches };
     } catch (error) {
-        // console.error(`[filterTorrents] ❌ Error:`, error);
         return { matches: [], partialMatches: [] };
     }
 }
-
-/* let test = async () => {
-    let result = await format_rakun("ghost in the shell");
-    console.log(result);
-};
-test(); */

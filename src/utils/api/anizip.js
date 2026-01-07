@@ -60,7 +60,6 @@ export async function fetch_anizip_data(fetchParam) {
     return results;
   }
   
-  // return episode data only (search provides the rest)
   const data = {
     episodeList: [],
     episodeCount: mapping.episodeCount || null

@@ -122,8 +122,6 @@ export async function fetch_anilist_data(anime_name) {
     if (results.length > 0) {
       return results;
     }
-
-    // fallback using fuzzy search with processed terms
     logger.warn("empty direct AniList search, trying processed terms...");
     const processed_terms = await process_term(anime_name);
     

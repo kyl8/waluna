@@ -37,10 +37,7 @@ const SearchResultItem = ({ item, onClick }) => {
       try { unsub(); } catch (e) { unsubscribeFrameRate(cb); }
     };
   }, []);
-
-  // calculate transition duration based on frame rate  
   const transitionDuration = getOptimalDuration(100);
-
   return (
     <Flex
       p={4}

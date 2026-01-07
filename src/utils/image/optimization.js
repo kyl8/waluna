@@ -1,4 +1,3 @@
-// some image optimazation utilities - lazy loading, blur hash, caching
 import { indexedDBCache, STORES } from '../cache/indexedDb.js';
 
 export function generateBlurHash(url) {

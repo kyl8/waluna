@@ -17,9 +17,18 @@ out/
 *.tgz
 /target
 
+# In development broken shits
+tomato_handler/
+tomato_handler/handlers.rs
+tomato_handler/mod.rs
+tomato_handler/parser.rs
+
 # Server-specific build outputs and generated files
 /server/target
 /server/cache/
+oxylabs.txt
+proxylist.txt
+validproxies.txt
 
 # Dev server ffmpeg binaries — ignore the entire folder
 /server/ffmpeg

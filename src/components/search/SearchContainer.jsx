@@ -1,14 +1,20 @@
 import React, { useState, useRef, useCallback, useDeferredValue, useEffect, useMemo, Suspense } from 'react';
 import { useApi } from '../../contexts/ApiContext';
+import useSourceAPI from '../../hooks/useSourceAPI.js';
 import { fetch_jikan_data } from '../../utils/api/jikan.js';
 import { fetch_anilist_data } from '../../utils/api/anilist.js';
 import { searchCache } from '../../utils/cache/memoryCache.js';
 import { indexedDBCache, STORES } from '../../utils/cache/indexedDb.js';
-import { Box, VStack, Text, Center, Badge, Spinner, Portal } from '@chakra-ui/react';
+import { Box, VStack, Text, Center, Badge, Spinner, Portal, useToast, Button, HStack, Icon } from '@chakra-ui/react';
+import { FaPlay, FaDownload, FaLink, FaFire } from 'react-icons/fa';
+import { MdSubtitles, MdVolumeUp, MdClosedCaption, MdHighQuality } from 'react-icons/md';
 import SearchBar from './SearchBar'; 
 import SearchResultItem from './SearchResultItem'; 
 import AnimeDetailModal from '../modals/AnimeDetailModal'; 
+import GenericAnimeDetailModal from '../modals/generic/GenericAnimeDetailModal';
 import { SearchResultSkeleton } from '../common/SkeletonLoading';
+import { fetch_anizip_data } from '../../utils/api/anizip.js';
+import { searchTorrents, startFullPipeline } from '../../utils/api/waluna.js';
 import logger from '../../utils/helpers/logger.js';
 
 const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
@@ -18,14 +24,17 @@ const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
   const [error, setError] = useState(null);
   const [isAnimeDetailOpen, setIsAnimeDetailOpen] = useState(false);
   const [selectedAnime, setSelectedAnime] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const deferredResults = useDeferredValue(results);
   const searchTimeoutRef = useRef(null);
   const isDropdownOpen = query.trim().length >= 2;
   const containerRef = useRef(null); 
   const [dropdownRect, setDropdownRect] = useState(null); 
+  const toast = useToast();
   
   const { bestApi, apiStatus, isChecking, recheckApis } = useApi();
+  const sourceAPI = useSourceAPI();
+  const { sourceId, sourceConfig, fetchEpisodes, fetchVideoLinks } = sourceAPI;
+
   useEffect(() => {
     if (!isDropdownOpen) {
       setDropdownRect(null);
@@ -94,7 +103,7 @@ const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
       
       try {
         if (!bestApi) {
-          throw new Error('No api available, trying again...');
+          throw new Error('Sem api disponível... Tente novamente mais tarde.');
         }
         
         let data;
@@ -104,7 +113,7 @@ const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
           data = await fetch_anilist_data(searchQuery);
         }
         
-        const animeResults = data.map(item => item.data);
+        const animeResults = data.map(item => item.data || item);
         const uniqueResults = animeResults.filter((anime, index, self) => {
           if (anime.anilist_id) {
             return index === self.findIndex((a) => a.anilist_id === anime.anilist_id);
@@ -126,40 +135,190 @@ const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
         setResults(uniqueResults);
         setError(null);
       } catch (err) {
-        setError(err.message || 'Error loading animes');
+        setError(err.message || 'Erro ao carregar animes');
         setResults([]);
-        
-        // retesta api
         recheckApis();
       } finally {
         setLoading(false);
       }
     }, 1200);
   }, [bestApi, recheckApis]);
+  const handleCloseAnimeDetail = useCallback(() => {
+    setIsAnimeDetailOpen(false);
+    setSelectedAnime(null);
+  }, []);
 
   const handleSelectAnime = useCallback((anime) => {
     setSelectedAnime(anime);
     setIsAnimeDetailOpen(true);
   }, []);
 
-  const handleCloseAnimeDetail = useCallback(() => {
-    setIsAnimeDetailOpen(false);
-    setSelectedAnime(null);
-  }, []);
-
   const handleCloseAllModalsLocal = useCallback(() => {
+    console.log('[SearchContainer] Closing all modals and clearing search');
     logger.info('[SearchContainer] Closing all modals and clearing search');
-    // Limpar a busca
     setResults([]);
     setQuery('');
     setSelectedAnime(null);
-    // Fechar AnimeDetailModal
     handleCloseAnimeDetail();
-    // Fechar SearchContainer
     if (onCloseAllModals) {
       onCloseAllModals();
     }
   }, [onCloseAllModals]);
+
+  const fetchNyaaEpisodes = useCallback(async (anime) => {  
+    try {
+      const res = await fetch_anizip_data({ anilist_id: anime.anilist_id || anime.id });
+      return res[0]?.data?.episodeList || [];
+    } catch (err) {
+      logger.warn('fetchNyaaEpisodes failed:', err);
+      toast({ title: 'Aviso', description: 'Nao foi possivel carregar AniZip', status: 'warning' });
+      return [];
+    }
+  }, [toast]);
+
+  const fetchTorrents = useCallback(async (episode, animeName) => {
+    try {
+      const query = `${animeName} ${episode.number}`.trim();
+      const res = await searchTorrents(query);
+      const list = res?.matches || res?.results || res?.data || [];
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map(t => ({
+          id: t.id || t.hash || t.link,
+          title: t.name || t.title || t.filename,
+          quality: t.quality || null,
+          size: t.size || null,
+          metadata: { seeds: t.seeders ?? t.seeds, leechers: t.leechers ?? t.peers },
+          magnet: t.magnet || t.magnetLink,
+          torrentFile: t.torrent_url || t.link || t.download
+        }));
+      }
+      toast({ title: 'Aviso', description: 'Nenhum torrent encontrado', status: 'warning' });
+      return [];
+    } catch (err) {
+      logger.error('fetchTorrents error:', err);
+      toast({ title: 'Erro', description: 'Falha ao buscar torrents', status: 'error' });
+      return [];
+    }
+  }, [toast]);
+
+  const renderTorrentOption = useCallback((torrent) => {
+    return (
+      <VStack align="start" spacing={2} key={torrent.id}>
+        <HStack justify="space-between" w="100%">
+          <VStack align="start" spacing={1} flex={1}>
+            <Text fontWeight="semibold" fontSize="sm" noOfLines={2}>{torrent.title}</Text>
+            <HStack spacing={2}>
+              <Badge colorScheme="purple">{torrent.quality}</Badge>
+              <Badge colorScheme="gray">{torrent.size}</Badge>
+              <Badge colorScheme="green">S: {torrent.metadata?.seeds}</Badge>
+              <Badge colorScheme="orange">L: {torrent.metadata?.leechers}</Badge>
+            </HStack>
+          </VStack>
+        </HStack>
+        <HStack spacing={2} w="100%">
+          <Button
+            size="sm"
+            colorScheme="purple"
+            flex={1}
+            leftIcon={<Icon as={FaPlay} boxSize={4} />}
+            onClick={async () => {
+              try {
+                const res = await startFullPipeline(torrent.magnet || torrent.magnetLink);
+                logger.info('Pipeline response:', res);
+                
+                if (res?.playlistURL || res?.hlsId) {
+                  let hlsHash = res.hlsId || res.downloadId;
+                  if (res.playlistURL && !hlsHash) {
+                    const match = res.playlistURL.match(/\/hls\/playlist\/([a-f0-9]+)/);
+                    if (match) {
+                      hlsHash = match[1];
+                    }
+                  }
+                  
+                  logger.info('Passando para player:', { hlsHash, playlistUrl: res.playlistURL });
+                  
+                  onPlayTorrent({
+                    hlsId: hlsHash,  
+                    filename: torrent.title,
+                    playlistUrl: res.playlistURL
+                  });
+                  toast({ title: 'Pipeline iniciada', description: 'Reprodução iniciada', status: 'success' });
+                }
+              } catch (err) {
+                logger.error('start pipeline error:', err);
+                toast({ title: 'Erro', description: 'Falha ao iniciar pipeline', status: 'error' });
+              }
+            }}
+          >
+            Play
+          </Button>
+          <Button
+            size="sm"
+            colorScheme="gray"
+            leftIcon={<Icon as={FaDownload} boxSize={4} />}
+            onClick={() => window.open(torrent.torrentFile)}
+          >
+            .torrent
+          </Button>
+          <Button
+            size="sm"
+            colorScheme="gray"
+            leftIcon={<Icon as={FaLink} boxSize={4} />}
+            onClick={() => navigator.clipboard?.writeText(torrent.magnet || torrent.magnetLink)}
+          >
+            Link
+          </Button>
+        </HStack>
+      </VStack>
+    );
+  }, [onPlayTorrent, toast]);
+
+  const renderStreamingOption = useCallback((option) => {
+    return (
+      <HStack justify="space-between" w="100%" key={option.id}>
+        <VStack align="start" spacing={1} flex={1}>
+          <Text fontWeight="semibold" fontSize="sm">{option.title}</Text>
+          <HStack spacing={2}>
+            <Badge colorScheme={option.type === 'streaming' ? 'blue' : 'green'} display="flex" alignItems="center" gap={1}>
+              <Icon as={MdHighQuality} boxSize={3} />
+              {option.quality}
+            </Badge>
+            {option.language && (
+              <Badge colorScheme="orange" fontSize="xs" display="flex" alignItems="center" gap={1}>
+                <Icon as={option.language === 'dublado' ? MdVolumeUp : MdClosedCaption} boxSize={3} />
+                {option.language === 'dublado' ? 'DUBLADO' : 'LEGENDADO'}
+              </Badge>
+            )}
+          </HStack>
+        </VStack>
+        <Button
+          size="sm"
+          colorScheme={option.type === 'streaming' ? 'blue' : 'green'}
+          leftIcon={<Icon as={option.type === 'streaming' ? FaPlay : FaDownload} />}
+          onClick={() => {
+            if (option.type === 'streaming') {
+              onPlayTorrent({
+                videoUrl: option.url,
+                filename: option.title,
+                isDirectStream: true,
+                streamMetadata: [{
+                  language: option.language,
+                  quality: option.quality,
+                  type: 'audio'
+                }]
+              });
+              toast({ title: 'Reproduzindo', description: option.title, status: 'success' });
+              handleCloseAllModalsLocal();
+            } else {
+              window.open(option.url);
+            }
+          }}
+        >
+          {option.type === 'streaming' ? 'Assistir' : 'Baixar'}
+        </Button>
+      </HStack>
+    );
+  }, [onPlayTorrent, toast, handleCloseAllModalsLocal]);
 
   const resultsNodes = useMemo(() => {
     if (!deferredResults || deferredResults.length === 0) return null;
@@ -174,7 +333,8 @@ const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
 
       <SearchBar value={query} onChange={handleQueryChange} />
 
-
+      {/* Renderizar modal based on sourceId */}
+      {sourceId === 'torrent' ? (
       <AnimeDetailModal
         isOpen={isAnimeDetailOpen}
         onClose={handleCloseAnimeDetail}
@@ -182,6 +342,19 @@ const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
         onCloseAllModals={handleCloseAllModalsLocal}
         onPlayTorrent={onPlayTorrent}
       />
+      ) : (
+        <GenericAnimeDetailModal
+          isOpen={isAnimeDetailOpen}
+          onClose={handleCloseAnimeDetail}
+          anime={selectedAnime}
+          fetchEpisodes={fetchEpisodes}
+          fetchEpisodeOptions={fetchVideoLinks}
+          renderEpisodeOption={renderStreamingOption}
+          sourceInfo={sourceConfig}
+          onCloseAllModals={handleCloseAllModalsLocal}
+          onPlayTorrent={onPlayTorrent}
+        />
+      )}
 
 
       {isDropdownOpen && (

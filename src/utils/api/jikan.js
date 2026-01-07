@@ -2,7 +2,6 @@ import { process_term, sleep } from "../helpers/selecter.js";
 import Fuse from "fuse.js";
 import logger from '../helpers/logger.js';
 
-// extract all titles from jikan data 
 function get_titles(data) {
   if (!data || !data.titles) return [];
   return data.titles.map(titleObj => titleObj.title);
@@ -21,9 +20,6 @@ export async function fetch_jikan_data(anime_name) {
     if (directResponse.ok) {
       const directJson = await directResponse.json();
       const directAnimes = directJson.data || [];
-
-  logger.info("direct search returned:", directAnimes.length, "results");
-
       for (const anime of directAnimes) {
         results.push({ term: anime_name, data: anime });
       }
@@ -33,17 +29,10 @@ export async function fetch_jikan_data(anime_name) {
     if (results.length > 0) {
       return results;
     }
-
-    // fallback - try with processed terms from names.json using fuzzy match
-  logger.warn("direct search empty, trying processed terms...");
     const processed_terms = await process_term(anime_name);
-    
     if (!processed_terms || processed_terms.length === 0) {
       throw new Error("No anime found.");
     }
-
-  logger.debug("processed terms:", processed_terms);
-
     const delay = 1.100; // 1.1 secs
 
     for (const term of processed_terms) {
@@ -77,7 +66,7 @@ export async function fetch_jikan_data(anime_name) {
           }
         }
       } catch (error) {
-        logger.error(`error fetching "${term}":`, error);
+        throw error;
       }
 
       await sleep(delay);
@@ -90,7 +79,6 @@ export async function fetch_jikan_data(anime_name) {
     return results;
 
   } catch (error) {
-    logger.error("error fetching:", error);
     throw error;
   }
 }

@@ -4,9 +4,8 @@ import { Global } from '@emotion/react';
 import { FaDownload, FaMagnet, FaSeedling, FaArrowDown, FaChevronUp, FaPlay } from 'react-icons/fa';
 import { filterTorrents } from '../../utils/helpers/rakun.js';
 import { startFullPipeline } from '../../utils/api/waluna.js';
-import VideoPlayer from '../video/VideoPlayer';
 
-const TorrentTable = ({ episodeId, onClose, animeName, episodeNumber, seasonNumber, onPlayTorrent }) => {
+const TorrentTable = ({ episodeId, episode, onClose, animeName, episodeNumber, seasonNumber, onPlayTorrent }) => {
   const [torrents, setTorrents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(null);
@@ -14,26 +13,18 @@ const TorrentTable = ({ episodeId, onClose, animeName, episodeNumber, seasonNumb
   useEffect(() => {
     const fetchTorrents = async () => {
       try {
-        console.log(`[TorrentTable] Fetching torrents for:`, { animeName, seasonNumber, episodeNumber });
         setLoading(true);
         const result = await filterTorrents(animeName, episodeNumber, seasonNumber || 1);
-        console.log(`[TorrentTable] Received ${result.matches.length} torrents`);
         setTorrents(result.matches || []);
       } catch (error) {
-        console.error(`[TorrentTable] Error fetching torrents:`, error);
         setTorrents([]);
       } finally {
         setLoading(false);
       }
     };
 
-    if (animeName && episodeNumber) {
-      console.log(`[TorrentTable] Starting fetch - animeName: ${animeName}, seasonNumber: ${seasonNumber}, episodeNumber: ${episodeNumber}`);
-      fetchTorrents();
-    } else {
-      console.warn(`[TorrentTable] Missing parameters - animeName: ${animeName}, seasonNumber: ${seasonNumber}, episodeNumber: ${episodeNumber}`);
-    }
-  }, [animeName, episodeNumber, seasonNumber]);
+    fetchTorrents();
+  }, [animeName, episodeNumber, seasonNumber, episode]);
 
   const getHealthColor = (seeds, leechers) => {
     const ratio = seeds / (leechers || 1);
@@ -63,7 +54,7 @@ const TorrentTable = ({ episodeId, onClose, animeName, episodeNumber, seasonNumb
         </Button>
       </HStack>
 
-      {loading ? (
+      { loading ? (
         <VStack spacing={4} py={8} w="100%">
           <Spinner 
             thickness='4px'
@@ -72,13 +63,7 @@ const TorrentTable = ({ episodeId, onClose, animeName, episodeNumber, seasonNumb
             color='purple.500'
             size='lg'
           />
-          <Text color="gray.400" fontSize="sm">Carregando torrents...</Text>
-        </VStack>
-      ) : torrents.length === 0 ? (
-        <VStack spacing={4} py={8} w="100%">
-          <Box fontSize="3xl">🔍</Box>
-          <Text color="gray.400" fontSize="sm">Nenhum torrent encontrado</Text>
-          <Text color="gray.500" fontSize="xs">Tente ajustar os filtros</Text>
+          <Text color="gray.400" fontSize="sm">Carregando...</Text>
         </VStack>
       ) : (
         <Box w="100%" overflowX="auto">
@@ -166,9 +151,7 @@ const TorrentTable = ({ episodeId, onClose, animeName, episodeNumber, seasonNumb
                             onClick={async () => {
                               setPlaying(torrent.hash);
                               try {
-                                console.log('[TorrentTable] Starting pipeline with magnet:', torrent.torrent_info?.magnet_link);
                                 const result = await startFullPipeline(torrent.torrent_info?.magnet_link);
-                                console.log('[TorrentTable] Pipeline started:', result);
                                 onPlayTorrent({
                                   ...torrent,
                                   downloadId: result.downloadId,
@@ -177,7 +160,6 @@ const TorrentTable = ({ episodeId, onClose, animeName, episodeNumber, seasonNumb
                                 });
                                 onClose();
                               } catch (error) {
-                                console.error('[TorrentTable] Pipeline error:', error);
                                 setPlaying(null);
                               }
                             }}
@@ -264,22 +246,17 @@ const EpisodesList = ({
 
   const finalAnimeName = useMemo(() => {
     if (animeName) {
-      console.log(`[EpisodesList] Using provided animeName:`, animeName);
       return animeName;
     }
     
     if (episodes && episodes.length > 0) {
       const extracted = episodes[0].anime?.name || episodes[0].animeName || episodes[0].seriesName;
-      console.log(`[EpisodesList] Extracted animeName from episodes:`, extracted);
       return extracted;
     }
-    
-    console.warn(`[EpisodesList] Could not find animeName`);
     return null;
   }, [animeName, episodes]);
 
   useEffect(() => {
-    console.log(`[EpisodesList] Component mounted with animeName:`, finalAnimeName);
   }, [finalAnimeName]);
 
   useEffect(() => {
@@ -318,23 +295,15 @@ const EpisodesList = ({
   const hasMore = visibleCount < episodes.length;
 
   const handleEpisodeClick = useCallback((epUid) => {
-    console.log(`[EpisodesList] Episode clicked:`, epUid);
     setExpandedEpisodeId(prev => prev === epUid ? null : epUid);
   }, []);
 
   const handlePlayTorrentClick = useCallback((torrent) => {
-    console.log(`[EpisodesList] Playing torrent:`, torrent.filename);
-    console.log(`[EpisodesList] Closing all modals`);
-    
-    // Fechar todos os modais anteriores PRIMEIRO
     if (onCloseAllModals) {
-      console.log('[EpisodesList] Calling onCloseAllModals');
       onCloseAllModals();
     }
     
-    // Depois enviar torrent para o player
     if (onPlayTorrent) {
-      console.log('[EpisodesList] Calling onPlayTorrent');
       onPlayTorrent(torrent);
     }
   }, [onPlayTorrent, onCloseAllModals]);
@@ -380,6 +349,7 @@ const EpisodesList = ({
             {expandedEpisodeId === ep.uid && (
               <TorrentTable 
                 episodeId={ep.uid}
+                episode={ep}
                 animeName={finalAnimeName}
                 seasonNumber={ep.seasonNumber || ep.season || 1}
                 episodeNumber={ep.episodeNumber || ep.number || ep.absoluteNumber}
@@ -405,7 +375,5 @@ const EpisodesList = ({
     </>
   );
 };
-
 EpisodesList.displayName = 'EpisodesList';
-
 export default React.memo(EpisodesList);

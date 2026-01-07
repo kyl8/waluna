@@ -27,6 +27,7 @@ import {
   Image,
   Badge,
   Progress,
+  useToast,
 } from '@chakra-ui/react';
 import {
   IoMoonSharp,
@@ -50,6 +51,11 @@ import {
 import { Global } from '@emotion/react';
 import AnimeCard from './AnimeCard';
 import ExpandedStatsSection from './ExpandedStatsSection';
+import AnimeDetailModal from '../modals/AnimeDetailModal';
+import GenericAnimeDetailModal from '../modals/generic/GenericAnimeDetailModal';
+import { fetch_anizip_data } from '../../utils/api/anizip.js';
+import { getAnimeWithEpisodes, getAllEpisodeLinks } from '../../utils/api/animefire.js';
+import { searchTorrents, startFullPipeline } from '../../utils/api/waluna.js';
 import logger from '../../utils/helpers/logger.js';
 
 // Mockando pra ver como fica
@@ -308,6 +314,16 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
   const [isEditingName, setIsEditingName] = useState(false);
   const { colorMode, toggleColorMode } = useColorMode();
   const contentRef = useRef(null);
+  const toast = useToast();
+
+  // Episode source state
+  const [episodeSource, setEpisodeSource] = useState(() => {
+    try {
+      return localStorage.getItem('episodeSource') || 'torrent';
+    } catch {
+      return 'torrent';
+    }
+  });
 
   const handleNameChange = useCallback((e) => {
     setName(e.target.value);
@@ -320,6 +336,10 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
 
   const handlePhotoChange = useCallback(() => {
     logger.log('Foto alterada');
+  }, []);
+
+  const handleSourceChange = useCallback((source) => {
+    setEpisodeSource(source);
   }, []);
 
   const memoizedStats = useMemo(() => (
@@ -547,7 +567,7 @@ const ConfigModal = ({ isOpen, onClose, userName = 'kyl', userPhotoUrl = '' }) =
               spacing={4} 
               align="stretch" 
               w={{ base: '100%', lg: '60%' }}
-            >
+            >              
               <RecentActivity />
               <Tabs variant="enclosed" colorScheme="purple" isFitted w="100%">
                 <TabList 

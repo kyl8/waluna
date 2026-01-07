@@ -1,8 +1,6 @@
 import logger from '../helpers/logger';
 const API_BASE_URL = 'http://127.0.0.1:8080';
 
-
-//check server status
 export const checkServer = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/`);
@@ -271,8 +269,7 @@ export const listActiveDownloads = async (pretty = true) => {
   }
 };
 
-/**
- * Start video conversion to HLS with retry
+/*
  * @param {string} id - download id
  * @param {number} maxRetries - maximum attempts (default: 15)
  * @param {number} retryDelay - delay between attempts in ms (default: 2 seconds)
@@ -368,8 +365,8 @@ export const getSegmentURL = (id, segment) => {
 };
 
 /**
- * Obtém a URL de um arquivo no cache
- * @param {string} path - Caminho relativo no cache
+ * retrieves the URL of a file in the cache
+ * @param {string} path 
  */
 export const getCacheURL = (path) => {
   if (!path) {
@@ -401,8 +398,6 @@ export const waitForDownloadComplete = async (downloadId, maxWaitTime = 300000, 
             reject(new Error(`timeout: file not found ${maxWaitTime / 1000}s`));
             return;
           }
-
-          // entar obter status do download
           const status = await getDownloadStatus(downloadId, false);
           
           if (status.ok) {
@@ -411,7 +406,6 @@ export const waitForDownloadComplete = async (downloadId, maxWaitTime = 300000, 
             resolve(status);
           }
         } catch (error) {
-          // se erro, continua tentando (arquivo ainda não foi criado)
           logger.debug('waiting for download file', { error: error.message });
         }
       }, pollInterval);
@@ -422,8 +416,7 @@ export const waitForDownloadComplete = async (downloadId, maxWaitTime = 300000, 
   }
 };
 
-/**
- * Flux: Download → Wait for file → HLS Conversion
+/** 
  * @param {string} magnetLink - torrent magnet link
  * @param {number} downloadTimeout - maximum wait time in ms (default: 30 minutes)
  */
@@ -435,22 +428,10 @@ export const startFullPipeline = async (magnetLink, downloadTimeout = 1800000) =
       throw new Error('magnet link is required');
     }
 
-    // 1. Iniciar download
     const downloadResult = await startDownload(magnetLink);
     const downloadId = downloadResult.download_id;
-    logger.info('download ID:', downloadId);
-
-    // 2. Aguardar arquivo ser criado
-    logger.info('waiting for file to be created...');
     const downloadInfo = await waitForDownloadComplete(downloadId, downloadTimeout);
-    logger.info('download info:', downloadInfo);
-
-    // 3. Iniciar conversão HLS com o downloadId
-    logger.info('starting HLS conversion...');
     const hlsResult = await startHLSConversion(downloadId);
-    logger.info('HLS conversion started');
-
-    // 4. Iniciar extração de legendas em paralelo (não bloqueia)
     startSubtitleExtractionBackground(downloadId);
 
     return {

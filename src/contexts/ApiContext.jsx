@@ -38,18 +38,10 @@ export const ApiProvider = ({ children }) => {
       } else if (anilistOk) {
         best = 'anilist';
       }
-
       setBestApi(best);
-      
-      if (best) {
-        logger.info(`✅ API selecionada: ${best.toUpperCase()}`);
-      } else {
-        logger.warn('❌ Nenhuma API disponível');
-      }
-
       setLastCheck(Date.now());
     } catch (error) {
-      logger.error('❌ Erro ao testar APIs:', error);
+      throw new Error(`[ApiProvider] Erro ao checar apis: ${error.message}`);
     } finally {
       setIsChecking(false);
     }

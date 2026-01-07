@@ -23,7 +23,7 @@ import {
   IconButton,
   usePrefersReducedMotion
 } from '@chakra-ui/react';
-import { FaDownload, FaMagnet, FaSeedling, FaArrowDown } from 'react-icons/fa';
+import { FaDownload, FaMagnet, FaSeedling, FaArrowDown, FaPlay } from 'react-icons/fa'; 
 import { MOCK_TORRENTS } from '../../constants/mockTorrents'; 
 import { Global } from '@emotion/react';
 import { getOptimalDuration, subscribeFrameRate, unsubscribeFrameRate } from '../../utils/helpers/animation.js';
@@ -32,14 +32,6 @@ const TorrentRow = React.memo(({ torrent, getHealthColor, formatNumber, handleDo
   const healthColor = getHealthColor(torrent.seeds, torrent.leechers);
   const healthBg = healthColor === 'green' ? 'green.900' : healthColor === 'yellow' ? 'yellow.900' : 'red.900';
   const healthTextColor = healthColor === 'green' ? 'green.200' : healthColor === 'yellow' ? 'yellow.200' : 'red.200';
-
-  const [tick, setTick] = React.useState(0);
-  React.useEffect(() => {
-    const cb = () => setTick(t => t + 1);
-    const unsub = subscribeFrameRate(cb);
-    return () => { try { unsub(); } catch (e) { unsubscribeFrameRate(cb); } };
-  }, []);
-
   const transitionDuration = getOptimalDuration(100);
 
   return (
@@ -144,19 +136,6 @@ const EpisodeDetailModal = ({ isOpen, onClose, episode }) => {
   const containerRef = useRef(null);
   const shouldReduceMotion = usePrefersReducedMotion();
 
-  const handleDownload = useCallback((torrent) => {
-    console.log('Download torrent:', torrent.name);
-  }, []);
-
-  const handleMagnet = useCallback((torrent) => {
-    console.log('Magnet link:', torrent.name);
-  }, []);
-
-  const episodeLabel = useMemo(
-    () => episode && Number.isFinite(episode.number) ? `EP ${episode.number}` : 'EP N/A',
-    [episode?.number]
-  );
-
   const getHealthColor = useCallback((seeds, leechers) => {
     const ratio = seeds / (leechers || 1);
     if (ratio > 2) return 'green';
@@ -179,9 +158,6 @@ const EpisodeDetailModal = ({ isOpen, onClose, episode }) => {
     if (!episode?.airDate) return null;
     return new Date(episode.airDate).toLocaleDateString('pt-BR');
   }, [episode?.airDate]);
-
-  if (!episode) return null;
-
   return (
     <>
       <Global
@@ -232,7 +208,6 @@ const EpisodeDetailModal = ({ isOpen, onClose, episode }) => {
               )}
 
               <Divider borderColor="#2d2d2d" />
-
               <Box overflowX="auto" borderRadius="lg" border="1px solid #2d2d2d"
                 css={{
                   contain: 'layout style paint',

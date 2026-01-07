@@ -1,8 +1,3 @@
-/**
- * Mock data for torrents
- * Used in EpisodeDetailModal for demonstration
- */
-
 export const MOCK_TORRENTS = [
   {
     id: 1,

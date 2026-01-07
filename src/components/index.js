@@ -1,6 +1,5 @@
-
-export { Navbar, VirtualList, SearchResultSkeleton, EpisodeRowSkeleton, AnimeDetailSkeleton } from './common';
-export { SearchBar, SearchContainer, SearchModal, SearchResultItem } from './search';
-export { AnimeDetailModal, EpisodeDetailModal, ConfigModal } from './modals';
-export { VideoPlayer, PlayerControls } from './video';
-export { EpisodesList } from './episodes';
+export { default as Navbar } from './common/Navbar';
+export { default as SearchContainer } from './search/SearchContainer';
+export { ErrorBoundary } from './common/ErrorBoundary';
+export { default as ConfigModal } from './profile/ConfigModal';
+export { default as VideoPlayer } from './video/VideoPlayer';

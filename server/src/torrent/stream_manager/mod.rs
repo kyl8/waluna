@@ -748,6 +748,7 @@ async fn extract_and_serve_subtitles(
 
 pub fn router() -> Router {
     Router::new()
+        .route("/", get(|| async { "Stream Manager is alive" }))
         .route("/subs/:id/:lang", get(get_subs_by_lang))
         .route("/subs/:id", get(get_all_subs_by_id))
         .route("/extract/:id", get(extract_and_serve_subtitles))

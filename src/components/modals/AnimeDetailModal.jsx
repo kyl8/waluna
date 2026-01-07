@@ -37,7 +37,6 @@ class ListErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    logger.error('Error rendering virtualized list:', error, info);
     if (this.props.onError) this.props.onError(error);
   }
 
@@ -61,33 +60,30 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
 
   useEffect(() => {
     const loadAnimeDetails = async () => {
-      setLoading(true);
       setAnimeDetails(anime);
-
+      if (anime?.episodes && Array.isArray(anime.episodes) && anime.episodes.length > 0) {
+        setEpisodes(anime.episodes);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+ 
       try {
-        logger.debug('Loading anime episodes:', anime.title || anime.title_english || anime.name || anime.titles?.[0]?.title);
-
         let anilistId = anime.anilist_id || anime.id || null;
         if (anilistId) anilistId = Number(anilistId);
-
         const fetchParam = {
           anilist_id: anilistId || null,
           mal_id: anime.mal_id || anime.idMal || null
         };
-
         const results = await fetch_anizip_data(fetchParam);
-
         if (results.length > 0 && results[0].data.episodeList) {
           const episodeData = results[0].data;
-          logger.info('Loading episodes:', episodeData.episodeList.length);
           setEpisodes(episodeData.episodeList);
         } else {
-          logger.warn('No episodes found on AniZip');
           setEpisodes([]);
         }
       } catch (err) {
-        logger.error('Error loading episodes:', err);
-        setEpisodes([]);
+         setEpisodes([]);
       } finally {
         setLoading(false);
       }
@@ -102,7 +98,6 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
     const measure = () => {
       if (!episodesContainerRef.current) return;
       const w = episodesContainerRef.current.clientWidth;
-      logger.info(`Container width measured: ${w}`);
       if (w && w !== containerWidth) {
         setContainerWidth(w);
       }
@@ -141,14 +136,14 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
   const { episodes: sortedEpisodes = [], isPending } = useSortWorker(episodes, episodeSortMode) || {};
   const deferredEpisodes = sortedEpisodes || [];
 
-  const displayData = animeDetails || anime; 
+  const displayData = animeDetails || anime;
   const memoizedHelpers = React.useMemo(() => ({
     getTitle: () => {
-      if (!displayData) return 'Title not available';
+      if (!displayData) return 'Titulo não disponível';
       if (displayData.titles) {
         return displayData.titles.find(t => t.type === 'Default')?.title || displayData.title;
       }
-      return displayData.title || 'Title not available';
+      return displayData.title || 'Titulo não disponível';
     },
     getImage: () => {
       if (!displayData) return '';
@@ -159,9 +154,34 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
   const getTitle = memoizedHelpers.getTitle;
   const getImage = memoizedHelpers.getImage;
 
+  const episodesCount = (() => {
+    try {
+      if (!displayData) return undefined;
+      if (Array.isArray(displayData.episodes)) return displayData.episodes.length;
+      const v = displayData.episodes;
+      return typeof v === 'number' ? v : (v ? Number(v) : undefined);
+    } catch {
+      return undefined;
+    }
+  })();
+
+  const normalizeEpisode = (ep) => {
+    if (!ep) return {};
+    return {
+      number: ep.episode_number ?? ep.number ?? ep.episodeNumber ?? ep.absoluteNumber,
+      title: ep.episode_name ?? ep.title ?? ep.name,
+      image: ep.episode_thumbnail ?? ep.image ?? ep.thumb,
+      airDate: ep.air_date ?? ep.airDate ?? ep.aired,
+      isAired: ep.is_aired ?? ep.isAired ?? (ep.aired_on ? new Date(ep.aired_on) <= new Date() : undefined),
+      uid: ep.uid ?? ep.id ?? ep.ep_id,
+      absoluteNumber: ep.absoluteNumber ?? ep.episode_number ?? ep.number,
+    };
+  };
+  
   const EpisodeRowInner = ({ ep, style, index, shouldReduceMotion }) => {
-    const formattedDate = ep.airDate ? new Date(ep.airDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
-    const episodeLabel = Number.isFinite(ep.number) ? `EP ${ep.number}` : 'EP N/A';
+    const normalized = normalizeEpisode(ep);
+    const formattedDate = normalized.airDate ? new Date(normalized.airDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
+    const episodeLabel = Number.isFinite(normalized.number) ? `EP ${normalized.number}` : 'EP N/A';
     
     return (
     <Box
@@ -171,14 +191,14 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
       bg="#2d2d2d"
       borderRadius="md"
       _hover={!shouldReduceMotion ? { bg: '#353535' } : undefined}
-      opacity={ep.isAired === false ? 0.6 : 1}
+      opacity={normalized.isAired === false ? 0.6 : 1}
       position="relative"
       css={{ contain: 'layout paint' }}
     >
       <HStack align="center" spacing={2} justify="space-between">
-        {ep.image ? (
+        {normalized.image ? (
           <Image
-            src={ep.image}
+            src={normalized.image}
             alt={episodeLabel}
             w="60px"
             h="38px"
@@ -246,7 +266,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
           onClick={handleToggleSort}
           isLoading={isPending}
         >
-          {episodeSortMode === 'ascending' ? '↑ Ascend' : '↓ Descend'}
+          {episodeSortMode === 'ascending' ? '↑ Crescente' : '↓ Decrescente'}
         </Button>
       </HStack>
     </HStack>
@@ -258,14 +278,10 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
       e.stopPropagation?.();
     }
     const newCount = Math.min(deferredEpisodes.length, visibleCount + 50);
-    logger.debug(`Load more clicked: current ${visibleCount} -> next ${newCount}`);
-    logger.debug(`Before setVisibleCount: visibleCount state = ${visibleCount}`);
     setVisibleCount(newCount);
-    logger.debug(`After setVisibleCount called`);
   }, [visibleCount, deferredEpisodes.length]);
 
   useEffect(() => {
-    logger.debug(`visibleCount state changed in AnimeDetailModal: ${visibleCount}`);
   }, [visibleCount]);
 
   if (!anime) return null;
@@ -319,9 +335,9 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
                       <VStack align="stretch" spacing={2}>
                         <HStack>
                           <Badge colorScheme="purple" fontSize="sm">{displayData.type || 'TV'}</Badge>
-                          {displayData.episodes && (
+                          {episodesCount !== undefined && episodesCount !== null && (
                             <Badge colorScheme="blue" fontSize="sm">
-                              {displayData.episodes} {displayData.episodes === 1 ? 'EPISODE' : 'EPISODES'}
+                              {episodesCount} {episodesCount === 1 ? 'EPISODE' : 'EPISODES'}
                             </Badge>
                           )}
                         </HStack>

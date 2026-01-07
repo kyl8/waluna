@@ -3,11 +3,9 @@ import { Box, HStack, Button, Text, VStack } from '@chakra-ui/react';
 import logger from '../../utils/helpers/logger.js';
 
 let cachedFixedSizeList = null;
-
-// use react-window FixedSizeList when available, otherwise fallback to simple rendering
 function VirtualListInner({ items = [], rowHeight = 112, height = 400, width = '100%', overscan = 3, renderItem, showSort = false, sortKey = 'number' }) {
   const [FixedSizeListComp, setFixedSizeListComp] = useState(null);
-  const [sortMode, setSortMode] = useState('ascending'); // 'ascending' | 'descending'
+  const [sortMode, setSortMode] = useState('ascending'); 
   useEffect(() => {
     if (cachedFixedSizeList !== null) {
       setFixedSizeListComp(cachedFixedSizeList);
@@ -47,16 +45,15 @@ function VirtualListInner({ items = [], rowHeight = 112, height = 400, width = '
     return copy;
   }, [items, showSort, sortKey, sortMode]);
 
-  // if react-window is available, use it
   if (FixedSizeListComp) {
     const Comp = FixedSizeListComp;
     return (
       <>
         {showSort && (
           <HStack justify="end" mb={2}>
-            <Text color="gray.300" fontSize="sm">Order:</Text>
+            <Text color="gray.300" fontSize="sm">Ordem:</Text>
             <Button size="sm" onClick={() => setSortMode(m => m === 'ascending' ? 'descending' : 'ascending')}>
-              {sortMode === 'ascending' ? 'Ascending' : 'Descending'}
+              {sortMode === 'ascending' ? 'Crescente' : 'Decrescente'}
             </Button>
           </HStack>
         )}
@@ -73,8 +70,6 @@ function VirtualListInner({ items = [], rowHeight = 112, height = 400, width = '
     );
   }
 
-  // fallback: react-window not available — render simple list
-  logger?.warn?.('react-window not available, rendering fallback list');
   return (
     <Box width={width}>
       {showSort && (
