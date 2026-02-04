@@ -4,18 +4,32 @@ import { Global } from '@emotion/react';
 import { FaDownload, FaMagnet, FaSeedling, FaArrowDown, FaChevronUp, FaPlay } from 'react-icons/fa';
 import { filterTorrents } from '../../utils/helpers/rakun.js';
 import { startFullPipeline } from '../../utils/api/waluna.js';
+import { dataCache } from '../../utils/cache/memoryCache.js';
+import TorrentDownloadModal from '../modals/TorrentDownloadModal.jsx';
 
 const TorrentTable = ({ episodeId, episode, onClose, animeName, episodeNumber, seasonNumber, onPlayTorrent }) => {
   const [torrents, setTorrents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(null);
+  const [isTorrentModalOpen, setIsTorrentModalOpen] = useState(false);
+  const [selectedTorrentMagnet, setSelectedTorrentMagnet] = useState('');
 
   useEffect(() => {
     const fetchTorrents = async () => {
       try {
         setLoading(true);
+        const cacheKey = `torrents_${animeName}_${episodeNumber}_${seasonNumber}`;
+        const cached = dataCache.get(cacheKey);
+        if (cached) {
+          setTorrents(cached);
+          setLoading(false);
+          return;
+        }
+
         const result = await filterTorrents(animeName, episodeNumber, seasonNumber || 1);
-        setTorrents(result.matches || []);
+        const torrentList = result.matches || [];
+        dataCache.set(cacheKey, torrentList);
+        setTorrents(torrentList);
       } catch (error) {
         setTorrents([]);
       } finally {
@@ -146,25 +160,12 @@ const TorrentTable = ({ episodeId, episode, onClose, animeName, episodeNumber, s
                     </Td>
                     <Td textAlign="center" w="8%">
                       <HStack spacing={1} justify="center">
-                        <Tooltip label="Reproduzir">
+                        <Tooltip label="Reproduzir com download">
                           <Button 
-                            onClick={async () => {
-                              setPlaying(torrent.hash);
-                              try {
-                                const result = await startFullPipeline(torrent.torrent_info?.magnet_link);
-                                onPlayTorrent({
-                                  ...torrent,
-                                  downloadId: result.downloadId,
-                                  hlsId: result.hlsId,
-                                  playlistURL: result.playlistURL,
-                                });
-                                onClose();
-                              } catch (error) {
-                                setPlaying(null);
-                              }
+                            onClick={() => {
+                              setSelectedTorrentMagnet(torrent.torrent_info?.magnet_link || '');
+                              setIsTorrentModalOpen(true);
                             }}
-                            isLoading={playing === torrent.hash}
-                            loadingText="Iniciando..."
                             size="xs" 
                             colorScheme="purple"
                             bg="purple.600"
@@ -227,6 +228,13 @@ const TorrentTable = ({ episodeId, episode, onClose, animeName, episodeNumber, s
           </Table>
         </Box>
       )}
+
+      <TorrentDownloadModal
+        isOpen={isTorrentModalOpen}
+        onClose={() => setIsTorrentModalOpen(false)}
+        magnetLink={selectedTorrentMagnet}
+        onPlayTorrent={onPlayTorrent}
+      />
     </Box>
   );
 };

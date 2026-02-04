@@ -1,0 +1,971 @@
+﻿use axum::{
+    extract::{Path, Query},
+    routing::get,
+    Router, Json, http::StatusCode,
+};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::str::FromStr;
+use walkdir::WalkDir;
+use tracing::{info, warn};
+
+#[derive(Debug, Deserialize)]
+pub struct FilterQuery {
+    filter: Option<String>,
+}
+
+/// Query params para selecionar arquivo específico em torrent multi-arquivo
+#[derive(Debug, Deserialize)]
+pub struct FileIndexQuery {
+    /// Índice do arquivo de vídeo (para torrents com múltiplos arquivos)
+    file_index: Option<usize>,
+}
+
+/// Informação sobre um arquivo de vídeo em um torrent
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoFileInfo {
+    pub name: String,
+    pub path: String,
+    pub size: u64,
+    pub index: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoFilesResponse {
+    pub ok: bool,
+    pub download_id: String,
+    pub files: Vec<VideoFileInfo>,
+    pub is_multi_file: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubtitleStream {
+    pub index: i32,
+    pub codec_name: String,
+    pub language: Option<String>,
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubtitleFileResponse {
+    pub index: i32,
+    pub codec_name: String,
+    pub language: Option<String>,
+    pub title: Option<String>,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamInfo {
+    pub index: i32,
+    pub codec_type: String,
+    pub codec_name: String,
+    pub duration: Option<f64>,
+    pub bitrate: Option<i64>,
+    pub language: Option<String>,
+    pub title: Option<String>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub sample_rate: Option<i32>,
+    pub channels: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubtitleResponse {
+    pub subtitles: Vec<SubtitleStream>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubtitleFilesResponse {
+    pub subtitles: Vec<SubtitleFileResponse>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubtitleByLangResponse {
+    pub subtitles: Vec<SubtitleStream>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AllStreamsResponse {
+    pub streams: Vec<StreamInfo>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum StreamFilter {
+    Video,
+    Audio,
+    Subtitle,
+    Attachment,
+    All,
+}
+
+impl FromStr for StreamFilter {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "video" => Ok(StreamFilter::Video),
+            "audio" => Ok(StreamFilter::Audio),
+            "subs" | "subtitle" | "subtitles" => Ok(StreamFilter::Subtitle),
+            "attachment" => Ok(StreamFilter::Attachment),
+            "all" => Ok(StreamFilter::All),
+            _ => Err(format!("Unknown filter: {}", s)),
+        }
+    }
+}
+
+impl StreamFilter {
+    pub fn matches(&self, codec_type: &str) -> bool {
+        match self {
+            StreamFilter::Video => codec_type == "video",
+            StreamFilter::Audio => codec_type == "audio",
+            StreamFilter::Subtitle => codec_type == "subtitle",
+            StreamFilter::Attachment => codec_type == "attachment",
+            StreamFilter::All => true,
+        }
+    }
+}
+
+pub struct StreamManager;
+
+impl StreamManager {
+    /// Lê torrent_name do arquivo {download_id}.meta (JSON)
+    fn load_torrent_mapping(download_id: &str) -> Option<String> {
+        let meta_file = format!("cache/downloads/{}.meta", download_id);
+        
+        let content = fs::read_to_string(&meta_file).ok()?;
+        let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+        
+        json.get("torrent_name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    }
+
+    pub async fn run_ffprobe(args: &[&str]) -> Result<serde_json::Value, String> {
+        let ffprobe_path = "ffmpeg/bin/ffprobe.exe";
+
+        let output = if fs::metadata(ffprobe_path).is_ok() {
+            tokio::process::Command::new(ffprobe_path)
+                .args(args)
+                .output()
+                .await
+                .map_err(|e| format!("Execução do ffprobe falhou {}", e))
+        } else {
+            tokio::process::Command::new("ffprobe")
+                .args(args)
+                .output()
+                .await
+                .map_err(|e| format!("Execução do ffprobe falhou (system PATH): {}", e))
+        }?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Erro do ffprobe: {}", stderr));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        serde_json::from_str(&stdout)
+            .map_err(|e| format!("Erro ao analisar JSON: {}", e))
+    }
+
+    pub async fn run_ffmpeg(args: &[&str]) -> Result<String, String> {
+        let ffmpeg_path = "ffmpeg/bin/ffmpeg.exe";
+
+        let output = if fs::metadata(ffmpeg_path).is_ok() {
+            tokio::process::Command::new(ffmpeg_path)
+                .args(args)
+                .output()
+                .await
+                .map_err(|e| format!("Execução do ffmpeg falhou (bundled): {}", e))
+        } else {
+            tokio::process::Command::new("ffmpeg")
+                .args(args)
+                .output()
+                .await
+                .map_err(|e| format!("Execução do ffmpeg falhou (system PATH): {}", e))
+        }?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Erro do ffmpeg: {}", stderr));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.to_string())
+    }
+
+    pub async fn extract_all_streams_filtered(
+        video_path: &str,
+        filter: StreamFilter,
+    ) -> Result<Vec<StreamInfo>, String> {
+        let json = Self::run_ffprobe(&[
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            video_path,
+        ])
+        .await?;
+
+        let mut streams = Vec::new();
+
+        if let Some(streams_arr) = json.get("streams").and_then(|s| s.as_array()) {
+            for stream in streams_arr {
+                let codec_type = stream
+                    .get("codec_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+
+                if !filter.matches(codec_type) {
+                    continue;
+                }
+
+                let index = stream
+                    .get("index")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0) as i32;
+
+                let codec_name = stream
+                    .get("codec_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                let language = stream
+                    .get("tags")
+                    .and_then(|t| t.get("language"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                let title = stream
+                    .get("tags")
+                    .and_then(|tags| {
+                        if let Some(obj) = tags.as_object() {
+                            for (key, val) in obj.iter() {
+                                if key.to_lowercase() == "title" {
+                                    return val.as_str().map(|s| s.to_string());
+                                }
+                            }
+                        }
+                        None
+                    });
+
+                let duration = stream
+                    .get("duration")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| s.parse::<f64>().ok());
+
+                let bitrate = stream
+                    .get("bit_rate")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| s.parse::<i64>().ok());
+
+                let width = stream.get("width").and_then(|v| v.as_i64()).map(|i| i as i32);
+                let height = stream.get("height").and_then(|v| v.as_i64()).map(|i| i as i32);
+                let sample_rate = stream
+                    .get("sample_rate")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| s.parse::<i32>().ok());
+                let channels = stream.get("channels").and_then(|v| v.as_i64()).map(|i| i as i32);
+
+                streams.push(StreamInfo {
+                    index,
+                    codec_type: codec_type.to_string(),
+                    codec_name,
+                    duration,
+                    bitrate,
+                    language,
+                    title,
+                    width,
+                    height,
+                    sample_rate,
+                    channels,
+                });
+            }
+        }
+
+        Ok(streams)
+    }
+
+    pub async fn extract_subtitles_from_file(
+        video_path: &str,
+    ) -> Result<Vec<SubtitleStream>, String> {
+        let json = Self::run_ffprobe(&[
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            video_path,
+        ])
+        .await?;
+
+        let mut subtitles = Vec::new();
+
+        if let Some(streams_arr) = json.get("streams").and_then(|s| s.as_array()) {
+            for stream in streams_arr {
+                let codec_type = stream
+                    .get("codec_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                if codec_type != "subtitle" {
+                    continue;
+                }
+
+                let index = stream
+                    .get("index")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0) as i32;
+
+                let codec_name = stream
+                    .get("codec_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                let language = stream
+                    .get("tags")
+                    .and_then(|t| t.get("language"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let title = stream
+                    .get("tags")
+                    .and_then(|tags| {
+                        if let Some(obj) = tags.as_object() {
+                            for (key, val) in obj.iter() {
+                                if key.to_lowercase() == "title" {
+                                    return val.as_str().map(|s| s.to_string());
+                                }
+                            }
+                        }
+                        None
+                    });
+
+                subtitles.push(SubtitleStream {
+                    index,
+                    codec_name,
+                    language,
+                    title,
+                });
+            }
+        }
+
+        Ok(subtitles)
+    }
+
+    /// Tenta encontrar arquivo com retry - espera até 30 segundos pela criação do arquivo
+    fn find_video_file_with_retry(download_id: &str, max_attempts: u32) -> Result<String, String> {
+        let video_extensions = ["mkv", "mp4", "avi", "mov", "flv", "wmv", "webm", "m4v"];
+        let downloads_dir = "cache/downloads";
+        
+        // Tenta até max_attempts vezes
+        for attempt in 1..=max_attempts {
+            // 1. Lê do arquivo .meta JSON primeiro (fonte mais confiável)
+            if let Some(torrent_name) = Self::load_torrent_mapping(download_id) {
+                // Tenta como arquivo direto
+                let file_path = format!("{}/{}", downloads_dir, torrent_name);
+                if std::fs::metadata(&file_path).is_ok() {
+                    info!("[StreamManager] ✓ Arquivo encontrado (tentativa {}): {}", attempt, file_path);
+                    return Ok(file_path);
+                }
+                
+                // Tenta como pasta
+                if let Ok(files) = Self::find_video_files_in_dir(&file_path, &video_extensions) {
+                    if let Some(first_file) = files.first() {
+                        info!("[StreamManager] ✓ Arquivo encontrado em pasta (tentativa {}): {}", attempt, first_file);
+                        return Ok(first_file.clone());
+                    }
+                }
+            }
+            
+            // 2. Fallback: tenta arquivo direto com download_id
+            for ext in &video_extensions {
+                let path = format!("{}/{}.{}", downloads_dir, download_id, ext);
+                if std::fs::metadata(&path).is_ok() {
+                    info!("[StreamManager] ✓ Arquivo encontrado por extensão (tentativa {}): {}", attempt, path);
+                    return Ok(path);
+                }
+            }
+            
+            // 3. Fallback: pasta com nome download_id
+            let direct_path = format!("{}/{}", downloads_dir, download_id);
+            if let Ok(files) = Self::find_video_files_in_dir(&direct_path, &video_extensions) {
+                if let Some(first_file) = files.first() {
+                    info!("[StreamManager] ✓ Arquivo encontrado em pasta (tentativa {}): {}", attempt, first_file);
+                    return Ok(first_file.clone());
+                }
+            }
+            
+            if attempt < max_attempts {
+                info!("[StreamManager] ⏳ Arquivo não encontrado (tentativa {}/{}), aguardando 1s...", attempt, max_attempts);
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+            }
+        }
+
+        Err(format!("Nenhum arquivo de vídeo encontrado para id: {} após {} tentativas", download_id, max_attempts))
+    }
+
+    pub fn find_video_file(download_id: &str) -> Result<String, String> {
+        // Tenta até 30 vezes (30 segundos) para encontrar o arquivo
+        Self::find_video_file_with_retry(download_id, 30)
+    }
+
+    /// Lista todos os arquivos de vídeo em um download (para torrents com múltiplos arquivos)
+    pub fn list_video_files(download_id: &str) -> Result<Vec<VideoFileInfo>, String> {
+        // Tenta até 30 vezes (30 segundos) para encontrar o arquivo
+        let video_extensions = ["mkv", "mp4", "avi", "mov", "flv", "wmv", "webm", "m4v"];
+        let downloads_dir = "cache/downloads";
+        let max_attempts = 30;
+        
+        for attempt in 1..=max_attempts {
+            // 1. Lê do arquivo .meta JSON primeiro (fonte mais confiável)
+            if let Some(torrent_name) = Self::load_torrent_mapping(download_id) {
+                info!("[StreamManager] list_video_files usando .meta (tentativa {}): {} -> {}", attempt, download_id, torrent_name);
+                
+                // Tenta como arquivo direto
+                let file_path = format!("{}/{}", downloads_dir, torrent_name);
+                if let Ok(metadata) = fs::metadata(&file_path) {
+                    if metadata.is_file() {
+                        return Ok(vec![VideoFileInfo {
+                            name: torrent_name.clone(),
+                            path: file_path,
+                            size: metadata.len(),
+                            index: 0,
+                        }]);
+                    }
+                }
+                
+                // Tenta como pasta
+                if let Ok(files) = Self::find_video_files_in_dir_with_info(&file_path, &video_extensions) {
+                    if !files.is_empty() {
+                        return Ok(files);
+                    }
+                }
+            }
+            
+            // 2. Fallback: pasta com nome download_id
+            let direct_path = format!("{}/{}", downloads_dir, download_id);
+            if let Ok(files) = Self::find_video_files_in_dir_with_info(&direct_path, &video_extensions) {
+                if !files.is_empty() {
+                    info!("[StreamManager] Arquivos encontrados em pasta (tentativa {}): {}", attempt, direct_path);
+                    return Ok(files);
+                }
+            }
+            
+            // 3. Fallback: arquivo direto com download_id + extensão
+            for ext in &video_extensions {
+                let path = format!("{}/{}.{}", downloads_dir, download_id, ext);
+                if let Ok(metadata) = fs::metadata(&path) {
+                    return Ok(vec![VideoFileInfo {
+                        name: format!("{}.{}", download_id, ext),
+                        path,
+                        size: metadata.len(),
+                        index: 0,
+                    }]);
+                }
+            }
+            
+            if attempt < max_attempts {
+                info!("[StreamManager] ⏳ Arquivo não encontrado (tentativa {}/{}), aguardando 1s...", attempt, max_attempts);
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+            }
+        }
+
+        Err(format!("Nenhum arquivo de vídeo encontrado para id: {} após {} tentativas", download_id, max_attempts))
+    }
+
+    /// Encontra um arquivo de vídeo pelo índice em um torrent
+    pub fn find_video_file_by_index(download_id: &str, file_index: usize) -> Result<String, String> {
+        let files = Self::list_video_files(download_id)?;
+        
+        files.get(file_index)
+            .map(|f| f.path.clone())
+            .ok_or_else(|| format!(
+                "Arquivo de vídeo com índice {} não encontrado. Total de arquivos: {}", 
+                file_index, 
+                files.len()
+            ))
+    }
+
+    /// Helper para encontrar arquivos de vídeo em um diretório (recursivo)
+    fn find_video_files_in_dir(dir_path: &str, video_extensions: &[&str]) -> Result<Vec<String>, String> {
+        let mut files = Vec::new();
+        
+        for entry in WalkDir::new(dir_path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_file())
+        {
+            let path = entry.path();
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if video_extensions.contains(&ext.to_lowercase().as_str()) {
+                    files.push(path.to_string_lossy().to_string());
+                }
+            }
+        }
+        
+        files.sort();
+        Ok(files)
+    }
+
+    /// Helper para encontrar arquivos de vídeo com informações detalhadas
+    fn find_video_files_in_dir_with_info(dir_path: &str, video_extensions: &[&str]) -> Result<Vec<VideoFileInfo>, String> {
+        let mut files = Vec::new();
+        
+        for (index, entry) in WalkDir::new(dir_path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_file())
+            .enumerate()
+        {
+            let path = entry.path();
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if video_extensions.contains(&ext.to_lowercase().as_str()) {
+                    let name = path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    let size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+                    
+                    files.push(VideoFileInfo {
+                        name,
+                        path: path.to_string_lossy().to_string(),
+                        size,
+                        index,
+                    });
+                }
+            }
+        }
+        
+        files.sort_by(|a, b| a.name.cmp(&b.name));
+        for (i, file) in files.iter_mut().enumerate() {
+            file.index = i;
+        }
+        
+        Ok(files)
+    }
+
+    pub fn get_cached_subtitle_files(download_id: &str) -> Result<Vec<SubtitleFileResponse>, String> {
+        let subtitles_dir = format!("cache/subtitles/{}", download_id);
+        
+        if !fs::metadata(&subtitles_dir).map(|m| m.is_dir()).unwrap_or(false) {
+            return Ok(Vec::new());
+        }
+
+        let mut subtitle_responses = Vec::new();
+
+        if let Ok(entries) = fs::read_dir(&subtitles_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(filename) = path.file_name() {
+                        let filename_str = filename.to_string_lossy().to_string();
+                        
+                        let parts: Vec<&str> = filename_str.rsplitn(2, '.').collect();
+                        if parts.len() != 2 {
+                            continue;
+                        }
+                        
+                        let extension = parts[0];
+                        let name_part = parts[1];
+                        
+                        let name_components: Vec<&str> = name_part.splitn(3, '_').collect();
+                        if name_components.len() < 2 {
+                            continue;
+                        }
+
+                        let index = name_components[0].parse::<i32>().unwrap_or(-1);
+                        let language = if name_components[1] != "unknown" {
+                            Some(name_components[1].to_string())
+                        } else {
+                            None
+                        };
+                        let title = if name_components.len() > 2 && name_components[2] != "default" {
+                            Some(name_components[2].to_string())
+                        } else {
+                            None
+                        };
+
+                        let codec_name = match extension {
+                            "ass" => "ass",
+                            "ssa" => "ssa",
+                            "webvtt" => "webvtt",
+                            "srt" => "subrip",
+                            _ => "unknown",
+                        }.to_string();
+
+                        let url = format!("/cache/subtitles/{}/{}", download_id, filename_str);
+
+                        subtitle_responses.push(SubtitleFileResponse {
+                            index,
+                            codec_name,
+                            language,
+                            title,
+                            url,
+                        });
+                    }
+                }
+            }
+        }
+        subtitle_responses.sort_by_key(|s| s.index);
+
+        Ok(subtitle_responses)
+    }
+
+    pub async fn extract_subtitles_to_files(
+        download_id: &str,
+        video_path: &str,
+    ) -> Result<Vec<SubtitleFileResponse>, String> {
+        let subtitles_dir = format!("./cache/subtitles/{}", download_id);
+        fs::create_dir_all(&subtitles_dir)
+            .map_err(|e| format!("Falha ao criar diretório de legendas: {}", e))?;
+
+        let json = Self::run_ffprobe(&[
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            video_path,
+        ])
+        .await?;
+
+        let mut subtitle_responses = Vec::new();
+        let mut extract_tasks = Vec::new();
+        let mut seen_languages = std::collections::HashSet::new();
+
+        if let Some(streams_arr) = json.get("streams").and_then(|s| s.as_array()) {
+            for stream in streams_arr {
+                let codec_type = stream
+                    .get("codec_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                if codec_type != "subtitle" {
+                    continue;
+                }
+
+                let index = stream
+                    .get("index")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0) as i32;
+
+                let codec_name = stream
+                    .get("codec_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                let language = stream
+                    .get("tags")
+                    .and_then(|t| t.get("language"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                let title = stream
+                    .get("tags")
+                    .and_then(|tags| {
+                        if let Some(obj) = tags.as_object() {
+                            for (key, val) in obj.iter() {
+                                if key.to_lowercase() == "title" {
+                                    return val.as_str().map(|s| s.to_string());
+                                }
+                            }
+                        }
+                        None
+                    });
+
+                let lang_key = language.as_deref().unwrap_or("unknown");
+                if seen_languages.contains(lang_key) {
+                    info!("[StreamManager:{}] Pulando idioma duplicado: {}", download_id, lang_key);
+                    continue;
+                }
+                seen_languages.insert(lang_key.to_string());
+
+                let output_format = match codec_name.as_str() {
+                    "ass" | "ssa" => "ass",
+                    "webvtt" => "ass",  
+                    "subrip" => "ass",  
+                    _ => "ass",         
+                };
+
+                let output_filename = format!(
+                    "{}_{}_{}.{}",
+                    index,
+                    language.as_deref().unwrap_or("unknown"),
+                    title.as_deref().unwrap_or("default"),
+                    output_format
+                );
+
+                let output_path = format!("{}/{}", subtitles_dir, output_filename);
+                let video_path_clone = video_path.to_string();
+                let codec_name_clone = codec_name.clone();
+
+
+                let task = async move {
+                    // Sempre converter/recodificar para ASS para garantir compatibilidade
+                    let args = vec![
+                        "-i".to_string(),
+                        video_path_clone,
+                        "-map".to_string(),
+                        format!("0:{}", index),
+                        "-c".to_string(),
+                        "ass".to_string(),
+                        "-y".to_string(),
+                        output_path,
+                    ];
+                    
+                    Self::run_ffmpeg(&args.iter().map(|s| s.as_str()).collect::<Vec<_>>())
+                    .await
+                };
+
+                extract_tasks.push(task);
+
+                let url = format!("/cache/subtitles/{}/{}", download_id, output_filename);
+
+                subtitle_responses.push(SubtitleFileResponse {
+                    index,
+                    codec_name,
+                    language,
+                    title,
+                    url,
+                });
+            }
+        }
+
+        if extract_tasks.len() > 0 {
+            info!("[StreamManager:{}] Extraindo {} idiomas de legendas em paralelo", download_id, extract_tasks.len());
+            
+            let results = futures::future::join_all(extract_tasks).await;
+            for (i, result) in results.iter().enumerate() {
+                if let Err(e) = result {
+                    info!("[StreamManager:{}] Falha ao extrair legenda {}: {}", download_id, i, e);
+                    return Err(format!("Falha ao extrair legenda {}: {}", i, e));
+                } else {
+                    info!("[StreamManager:{}] Legenda extraída com sucesso {}", download_id, i);
+                }
+            }
+
+            let mut verified_responses = Vec::new();
+            for response in subtitle_responses.iter() {
+                let file_path = format!("{}/{}", subtitles_dir, response.url.split('/').last().unwrap_or(""));
+                match fs::metadata(&file_path) {
+                    Ok(metadata) => {
+                        let size = metadata.len();
+                        if size > 0 {
+                            info!("[StreamManager:{}] Arquivo de legenda verificado: {} ({} bytes)", download_id, response.url, size);
+                            verified_responses.push(response.clone());
+                        } else {
+                            info!("[StreamManager:{}] AVISO: Arquivo de legenda está vazio: {}", download_id, response.url);
+                        }
+                    }
+                    Err(e) => {
+                        info!("[StreamManager:{}] AVISO: Não foi possível verificar o arquivo de legenda: {} - {}", download_id, response.url, e);
+                    }
+                }
+            }
+
+            if verified_responses.is_empty() {
+                return Err("Nenhum arquivo de legenda válido foi extraído".to_string());
+            }
+
+            return Ok(verified_responses);
+        }
+
+        Ok(subtitle_responses)
+    }
+}
+
+async fn get_all_streams_by_id(
+    Path(id): Path<String>,
+    Query(params): Query<FilterQuery>,
+) -> Result<Json<AllStreamsResponse>, (StatusCode, String)> {
+    info!("[StreamManager:{}] Extraindo streams", id);
+    let video_path = StreamManager::find_video_file(&id)
+        .map_err(|e| (StatusCode::NOT_FOUND, e))?;
+
+    let filter = match params.filter {
+        Some(f) => StreamFilter::from_str(&f)
+            .map_err(|e| (StatusCode::BAD_REQUEST, e))?,
+        None => StreamFilter::All,
+    };
+
+    let streams = StreamManager::extract_all_streams_filtered(&video_path, filter)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    Ok(Json(AllStreamsResponse { streams }))
+}
+
+async fn get_all_subs_by_id(
+    Path(id): Path<String>,
+) -> Result<Json<SubtitleFilesResponse>, (StatusCode, String)> {
+    info!("[StreamManager:{}] Extraindo legendas", id);
+    
+    let cached_subtitles = StreamManager::get_cached_subtitle_files(&id)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    
+    if !cached_subtitles.is_empty() {
+        info!("[StreamManager:{}] Retornando legendas em cache", id);
+        return Ok(Json(SubtitleFilesResponse { subtitles: cached_subtitles }));
+    }
+
+    let video_path = StreamManager::find_video_file(&id)
+        .map_err(|e| (StatusCode::NOT_FOUND, e))?;
+
+    let subtitle_stream_metadata = StreamManager::extract_subtitles_from_file(&video_path)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    let subtitles: Vec<SubtitleFileResponse> = subtitle_stream_metadata
+        .into_iter()
+        .map(|s| SubtitleFileResponse {
+            index: s.index,
+            codec_name: s.codec_name,
+            language: s.language,
+            title: s.title,
+            url: String::new(), 
+        })
+        .collect();
+
+    Ok(Json(SubtitleFilesResponse { subtitles }))
+}
+
+async fn get_subs_by_lang(
+    Path((id, lang)): Path<(String, String)>,
+) -> Result<Json<SubtitleFilesResponse>, (StatusCode, String)> {
+    info!("[StreamManager:{}] Extraindo legendas por idioma: {}", id, lang);
+    
+    let mut cached_subtitles = StreamManager::get_cached_subtitle_files(&id)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    
+    if !cached_subtitles.is_empty() {
+        info!("[StreamManager:{}] Filtrando legendas em cache por idioma: {}", id, lang);
+        cached_subtitles.retain(|sub| {
+            sub.language
+                .as_ref()
+                .map(|l| l.to_lowercase().contains(&lang.to_lowercase()))
+                .unwrap_or(false)
+        });
+        return Ok(Json(SubtitleFilesResponse { subtitles: cached_subtitles }));
+    }
+
+    let video_path = StreamManager::find_video_file(&id)
+        .map_err(|e| (StatusCode::NOT_FOUND, e))?;
+
+    let all_subtitles = StreamManager::extract_subtitles_from_file(&video_path)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    let filtered: Vec<SubtitleFileResponse> = all_subtitles
+        .into_iter()
+        .filter(|sub| {
+            sub.language
+                .as_ref()
+                .map(|l| l.to_lowercase().contains(&lang.to_lowercase()))
+                .unwrap_or(false)
+        })
+        .map(|s| SubtitleFileResponse {
+            index: s.index,
+            codec_name: s.codec_name,
+            language: s.language,
+            title: s.title,
+            url: String::new(), 
+        })
+        .collect();
+
+    Ok(Json(SubtitleFilesResponse { subtitles: filtered }))
+}
+
+async fn extract_and_serve_subtitles(
+    Path(id): Path<String>,
+) -> Result<Json<SubtitleFilesResponse>, (StatusCode, String)> {
+    info!("[StreamManager:{}] Extraindo legendas e servindo", id);
+    let video_path = StreamManager::find_video_file(&id)
+        .map_err(|e| (StatusCode::NOT_FOUND, e))?;
+
+    let subtitles = StreamManager::extract_subtitles_to_files(&id, &video_path)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    Ok(Json(SubtitleFilesResponse { subtitles }))
+}
+
+/// Lista todos os arquivos de vídeo em um download (para torrents com múltiplos arquivos)
+async fn list_video_files(
+    Path(id): Path<String>,
+) -> Result<Json<VideoFilesResponse>, (StatusCode, String)> {
+    info!("[StreamManager:{}] Listando arquivos de vídeo", id);
+    
+    let files = StreamManager::list_video_files(&id);
+    
+    match files {
+        Ok(found_files) => {
+            let is_multi_file = found_files.len() > 1;
+            
+            info!("[StreamManager:{}] Encontrados {} arquivos de vídeo (multi-file: {})", 
+                id, found_files.len(), is_multi_file);
+            
+            Ok(Json(VideoFilesResponse {
+                ok: true,
+                download_id: id,
+                files: found_files,
+                is_multi_file,
+            }))
+        }
+        Err(e) => {
+            warn!("[StreamManager:{}] Nenhum arquivo encontrado: {}", id, e);
+            // Retorna resposta vazia ao invés de erro 404
+            Ok(Json(VideoFilesResponse {
+                ok: false,
+                download_id: id,
+                files: vec![],
+                is_multi_file: false,
+            }))
+        }
+    }
+}
+
+/// Obtém o caminho de um arquivo de vídeo específico pelo índice
+async fn get_video_file_by_index(
+    Path((id, index)): Path<(String, usize)>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    info!("[StreamManager:{}] Buscando arquivo de vídeo pelo índice {}", id, index);
+    
+    let path = StreamManager::find_video_file_by_index(&id, index)
+        .map_err(|e| (StatusCode::NOT_FOUND, e))?;
+    
+    // Obter informações do arquivo
+    let metadata = fs::metadata(&path)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Erro ao ler metadados: {}", e)))?;
+    
+    let file_name = std::path::Path::new(&path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+    
+    Ok(Json(serde_json::json!({
+        "download_id": id,
+        "file_index": index,
+        "name": file_name,
+        "path": path,
+        "size": metadata.len(),
+    })))
+}
+
+pub fn router() -> Router {
+    Router::new()
+        .route("/", get(|| async { "Stream Manager is alive" }))
+        .route("/files/:id", get(list_video_files))
+        .route("/files/:id/:index", get(get_video_file_by_index))
+        .route("/subs/:id/:lang", get(get_subs_by_lang))
+        .route("/subs/:id", get(get_all_subs_by_id))
+        .route("/extract/:id", get(extract_and_serve_subtitles))
+        .route("/:id", get(get_all_streams_by_id))
+}

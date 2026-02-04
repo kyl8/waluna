@@ -269,12 +269,90 @@ export const listActiveDownloads = async (pretty = true) => {
   }
 };
 
-/*
+/**
+ * List all video files in a multi-file torrent
  * @param {string} id - download id
+ */
+export const listVideoFiles = async (id) => {
+  try {
+    if (!id) {
+      throw new Error('download ID is required');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/streams/files/${id}`);
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new Error(error?.error || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    // Aceita tanto ok: false quanto ok: true (ok: false significa sem arquivos)
+    if (!data.files) {
+      throw new Error(data.error || 'Failed to list files');
+    }
+
+    logger.info(`[API] Listed ${data.files?.length || 0} video files for ${id}`);
+    return {
+      ok: data.files && data.files.length > 0,
+      files: data.files || [],
+      isMultiFile: data.is_multi_file || false,
+      downloadId: data.download_id || id,
+    };
+  } catch (error) {
+    logger.error('list video files error', error);
+    throw error;
+  }
+};
+
+/**
+ * Get info about a specific file in a torrent
+ * @param {string} id - download id
+ * @param {number} fileIndex - file index
+ */
+export const getFileInfo = async (id, fileIndex) => {
+  try {
+    if (!id || fileIndex === undefined) {
+      throw new Error('download ID and file index are required');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/streams/files/${id}/${fileIndex}`);
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new Error(error?.error || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (!data.ok) {
+      throw new Error(data.error || 'Failed to get file info');
+    }
+
+    logger.info(`[API] Got file info for ${id}#${fileIndex}`);
+    return data;
+  } catch (error) {
+    logger.error('get file info error', error);
+    throw error;
+  }
+};
+
+/*
+ * Start HLS conversion for a specific file in a multi-file torrent
+ * @param {string} id - download id
+ * @param {number} fileIndex - file index (optional, uses first file if not specified)
  * @param {number} maxRetries - maximum attempts (default: 15)
  * @param {number} retryDelay - delay between attempts in ms (default: 2 seconds)
  */
-export const startHLSConversion = async (id, maxRetries = 15, retryDelay = 2000) => {
+export const startHLSConversion = async (id, fileIndex, maxRetries = 15, retryDelay = 2000) => {
+  // Handle overloaded signature for backward compatibility
+  if (typeof fileIndex === 'number' && fileIndex > 1000) {
+    // fileIndex is actually maxRetries
+    maxRetries = fileIndex;
+    fileIndex = undefined;
+  }
+
   try {
     if (!id) {
       throw new Error('download ID is required');
@@ -285,14 +363,20 @@ export const startHLSConversion = async (id, maxRetries = 15, retryDelay = 2000)
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         logger.info(`[API] HLS conversion attempt ${attempt}/${maxRetries}...`);
-        const response = await fetch(`http://127.0.0.1:8080/hls/status/${id}`);
+        
+        let url = `${API_BASE_URL}/hls/start/${id}`;
+        if (fileIndex !== undefined && fileIndex !== null) {
+          url += `?file_index=${fileIndex}`;
+        }
+        
+        const response = await fetch(url);
         
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
 
         const data = await response.json();
-        logger.info('[API] HLS conversion initiated:', id);
+        logger.info('[API] HLS conversion initiated:', id, fileIndex !== undefined ? `file ${fileIndex}` : '');
         return data;
       } catch (error) {
         lastError = error;
@@ -417,27 +501,75 @@ export const waitForDownloadComplete = async (downloadId, maxWaitTime = 300000, 
 };
 
 /** 
+ * Full pipeline: Download -> Wait for completion -> List files -> Convert to HLS -> Return playlist
  * @param {string} magnetLink - torrent magnet link
+ * @param {number} fileIndex - file index for multi-file torrents (optional)
  * @param {number} downloadTimeout - maximum wait time in ms (default: 30 minutes)
  */
-export const startFullPipeline = async (magnetLink, downloadTimeout = 1800000) => {
+export const startFullPipeline = async (magnetLink, fileIndex = null, downloadTimeout = 1800000) => {
   try {
-    logger.info('starting pipeline: download → wait → hls conversion');
+    logger.info('[Pipeline] Starting full pipeline...');
 
     if (!magnetLink) {
       throw new Error('magnet link is required');
     }
 
+    // Step 1: Start download
+    logger.info('[Pipeline] Step 1: Starting download...');
     const downloadResult = await startDownload(magnetLink);
     const downloadId = downloadResult.download_id;
+    
+    if (!downloadResult.ok) {
+      throw new Error(`Failed to start download: ${downloadResult.error}`);
+    }
+
+    // Step 2: Wait for download to complete
+    logger.info('[Pipeline] Step 2: Waiting for download completion...');
     const downloadInfo = await waitForDownloadComplete(downloadId, downloadTimeout);
-    const hlsResult = await startHLSConversion(downloadId);
-    startSubtitleExtractionBackground(downloadId);
+    logger.info('[Pipeline] Download complete:', downloadId);
+
+    // Step 3: If multi-file torrent and no file index specified, list files first
+    if (fileIndex === null || fileIndex === undefined) {
+      try {
+        const filesData = await listVideoFiles(downloadId);
+        if (filesData.files && filesData.files.length > 1) {
+          logger.info('[Pipeline] Multi-file torrent detected, using first file');
+          fileIndex = 0;
+        } else if (filesData.files && filesData.files.length === 1) {
+          logger.info('[Pipeline] Single file torrent detected');
+          fileIndex = 0;
+        } else {
+          logger.warn('[Pipeline] No video files found in torrent');
+        }
+      } catch (err) {
+        logger.warn('[Pipeline] Could not list files, proceeding without file index:', err.message);
+      }
+    }
+
+    // Step 4: Start HLS conversion
+    logger.info('[Pipeline] Step 3: Starting HLS conversion...');
+    const hlsResult = await startHLSConversion(downloadId, fileIndex);
+    
+    if (!hlsResult.ok) {
+      throw new Error(`Failed to start HLS conversion: ${hlsResult.error}`);
+    }
+
+    // Build composite ID for multi-file torrents (e.g., hash_0)
+    const compositeId = fileIndex !== null && fileIndex !== undefined 
+      ? `${downloadId}_${fileIndex}` 
+      : downloadId;
+
+    // Step 5: Start subtitle extraction in background (use composite ID)
+    startSubtitleExtractionBackground(compositeId);
+    logger.info('[Pipeline] Subtitle extraction started in background for:', compositeId);
+
+    logger.info('[Pipeline] Pipeline complete');
 
     return {
       downloadId,
-      hlsId: downloadId,
-      playlistURL: getPlaylistURL(downloadId),
+      hlsId: compositeId,  // Use composite ID for multi-file support
+      fileIndex,
+      playlistURL: getPlaylistURL(compositeId),  // Use composite ID for playlist
       status: hlsResult.status,
       downloadInfo,
     };
@@ -550,6 +682,8 @@ export default {
   getDownloadProgress,
   stopDownload,
   listActiveDownloads,
+  listVideoFiles,
+  getFileInfo,
   startHLSConversion,
   getHLSStatus,
   getPlaylistURL,

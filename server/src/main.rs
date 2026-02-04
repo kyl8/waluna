@@ -1,7 +1,8 @@
 mod api;
-mod torrent;
+mod common;
 mod config;
 mod proxy;
+mod torrent;
 
 use axum::{routing::get, Router};
 use tokio::net::TcpListener;

@@ -154,8 +154,7 @@ const SearchContainer = ({ onCloseAllModals, onPlayTorrent }) => {
   }, []);
 
   const handleCloseAllModalsLocal = useCallback(() => {
-    console.log('[SearchContainer] Closing all modals and clearing search');
-    logger.info('[SearchContainer] Closing all modals and clearing search');
+    logger.info('[SearchContainer] Fechando todos modais');
     setResults([]);
     setQuery('');
     setSelectedAnime(null);

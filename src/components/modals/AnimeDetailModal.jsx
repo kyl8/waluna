@@ -24,7 +24,8 @@ import useSortWorker from '../../utils/hooks/useSortWorker.js';
 import EpisodesList from '../episodes/EpisodesList.jsx';
 import VirtualList from '../common/VirtualList.jsx';
 import { AnimeDetailSkeleton } from '../common/SkeletonLoading';
-
+import { dataCache, searchCache } from '../../utils/cache/memoryCache.js';
+import { indexedDBCache, STORES } from '../../utils/cache/indexedDb.js';
 
 class ListErrorBoundary extends React.Component {
   constructor(props) {
@@ -66,8 +67,17 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
         setLoading(false);
         return;
       }
+      
+      const cacheKey = `anime_episodes_${anime.anilist_id || anime.id}`;
+      const cached = dataCache.get(cacheKey);
+      if (cached) {
+        setEpisodes(cached);
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
- 
+
       try {
         let anilistId = anime.anilist_id || anime.id || null;
         if (anilistId) anilistId = Number(anilistId);
@@ -77,8 +87,9 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
         };
         const results = await fetch_anizip_data(fetchParam);
         if (results.length > 0 && results[0].data.episodeList) {
-          const episodeData = results[0].data;
-          setEpisodes(episodeData.episodeList);
+          const episodeData = results[0].data.episodeList;
+          dataCache.set(cacheKey, episodeData);
+          setEpisodes(episodeData);
         } else {
           setEpisodes([]);
         }
@@ -133,8 +144,9 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
   }, [isOpen, containerWidth]); 
 
   
-  const { episodes: sortedEpisodes = [], isPending } = useSortWorker(episodes, episodeSortMode) || {};
-  const deferredEpisodes = sortedEpisodes || [];
+  const { episodes: sortedEpisodes = [], isPending } = useSortWorker(episodes, episodeSortMode, anime?.id || anime?.anilist_id) || {};
+  // Usa episodes original como fallback se sortedEpisodes ainda não foi processado
+  const deferredEpisodes = (sortedEpisodes && sortedEpisodes.length > 0) ? sortedEpisodes : episodes;
 
   const displayData = animeDetails || anime;
   const memoizedHelpers = React.useMemo(() => ({
@@ -392,9 +404,7 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
                         
                         <Box position="relative" css={{ contain: 'layout paint' }}>
                           <Box opacity={isPending ? 0.6 : 1} transition="opacity 100ms ease">
-                            {isPending ? (
-                              <Box minH="200px" />
-                            ) : deferredEpisodes?.length > 0 ? (
+                            {deferredEpisodes?.length > 0 ? (
                               deferredEpisodes.length > 200 ? (
                                 (() => {
                                   const rowHeight = 88;
@@ -409,6 +419,8 @@ const AnimeDetailModal = ({ isOpen, onClose, anime, onCloseAllModals, onPlayTorr
                                         onLoadMore={handleLoadMore}
                                         EpisodeRow={EpisodeRow}
                                         animeName={getTitle()}
+                                        onCloseAllModals={onCloseAllModals}
+                                        onPlayTorrent={onPlayTorrent}
                                       />
                                     );
                                   }

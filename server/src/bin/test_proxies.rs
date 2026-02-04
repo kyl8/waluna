@@ -19,7 +19,7 @@ async fn main() {
     // Lê e testa proxies do arquivo
     match test_proxies(&tester, proxy_file).await {
         Ok((total, valid)) => {
-            println!("\n📊 Resultado final:");
+            println!("\nResultado final:");
             println!("  Total de proxies: {}", total);
             println!("  Proxies válidas: {}", valid.len());
             println!("  Taxa de sucesso: {:.2}%", (valid.len() as f64 / total as f64) * 100.0);
@@ -33,7 +33,7 @@ async fn main() {
                 valid_vec.sort();
 
                 match fs::write("./validproxies.txt", valid_vec.join("\n")).await {
-                    Ok(_) => println!("✅ Proxies válidas salvas em validproxies.txt"),
+                    Ok(_) => println!("Proxies válidas salvas em validproxies.txt"),
                     Err(e) => error!(erro = %e, "Erro ao salvar proxies válidas"),
                 }
             }
@@ -62,7 +62,7 @@ async fn test_proxies(
         .collect();
 
     let total = proxies.len();
-    println!("🔍 Testando {} proxies de {}...\n", total, file);
+    println!("Testando {} proxies de {}...\n", total, file);
 
     let mut valid_proxies = Vec::new();
 

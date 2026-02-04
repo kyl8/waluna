@@ -5,6 +5,7 @@ import Hls from 'hls.js';
 import { motion } from 'framer-motion';
 import artplayerPluginLibass from 'artplayer-plugin-libass';
 import { fetchSubtitleMetadata, getSubtitleTemplate } from '../../utils/api/waluna';
+import { dataCache } from '../../utils/cache/memoryCache.js';
 import logger, { Logger } from '../../utils/helpers/logger';
 
 const log = new Logger('VideoPlayer');
@@ -32,7 +33,7 @@ const formatTime = (secs) => {
         : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 };
 
-const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
+const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId, fileIndex = null }) => {
     const artRef = useRef(null);
     const artInstance = useRef(null);
     const hlsInstance = useRef(null);
@@ -41,6 +42,8 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
     const durationInjected = useRef(false);
     const knownDuration = useRef(0);
     const subtitlesLoaded = useRef(false);
+    const positionRestored = useRef(false); 
+    const hlsReadyRef = useRef(false);
 
     const [displayTotal, setDisplayTotal] = useState('00:00');
     const [displayCurrent, setDisplayCurrent] = useState('00:00');
@@ -65,21 +68,34 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
         } catch (e) { }
     }, []);
 
-    const getStorageKey = useCallback(() => `waluna_player_pos_${torrentHash || videoUrl}`, [torrentHash, videoUrl]);
+    const getStorageKey = useCallback(() => {
+        const base = hlsId || torrentHash || videoUrl;
+        const fileId = fileIndex !== null ? `_file${fileIndex}` : '';
+        return `waluna_player_pos_${base}${fileId}`;
+    }, [hlsId, torrentHash, videoUrl, fileIndex]);
 
     const savePlaybackPosition = useCallback(() => {
         if (artInstance.current && artInstance.current.currentTime > 5) {
-            localStorage.setItem(getStorageKey(), artInstance.current.currentTime.toString());
+            const key = getStorageKey();
+            localStorage.setItem(key, artInstance.current.currentTime.toString());
+            log.info(`Posição salva: ${key} = ${artInstance.current.currentTime}`);
         }
     }, [getStorageKey]);
 
     const restorePlaybackPosition = useCallback((art) => {
+        if (positionRestored.current) return;
+        
         try {
             const savedTime = localStorage.getItem(getStorageKey());
             if (savedTime) {
                 const time = parseFloat(savedTime);
-                if (!isNaN(time) && time > 0 && (art.duration === 0 || time < art.duration - 10)) {
+                const isValidTime = !isNaN(time) && time > 10; 
+                const notNearEnd = art.duration === 0 || time < art.duration - 30; 
+                
+                if (isValidTime && notNearEnd) {
                     art.currentTime = time;
+                    positionRestored.current = true;
+                    log.info(`Posição restaurada: ${time}s`);
                     toast({
                         title: 'Reprodução retomada',
                         description: `Continuando de ${formatTime(time)}`,
@@ -89,7 +105,11 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
                         isClosable: true,
                         containerStyle: { zIndex: 9999 }
                     });
+                } else {
+                    log.info(`Posição não restaurada (${time}s é inválida ou perto do fim)`);
                 }
+            } else {
+                log.info('Nenhuma posição salva encontrada, começando do início');
             }
         } catch (e) { log.warn('Seek falhou', e); }
     }, [getStorageKey, toast]);
@@ -134,7 +154,7 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
         if (subtitlePollingRef.current) clearInterval(subtitlePollingRef.current);
         
         let attempts = 0;
-        const maxAttempts = 30;
+        const maxAttempts = 5; 
 
         const poll = async () => {
             if (!art || !art.template || !art.template.$player) {
@@ -147,10 +167,15 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
             }
 
             attempts++;
+            log.info(`Tentativa ${attempts}/${maxAttempts} de buscar legendas...`);
             const validated = await fetchAndValidateSubtitles(hash);
 
             if (validated.length > 0) {
-                if (!art.libass) return;
+                log.info(`${validated.length} legendas encontradas:`, validated);
+                if (!art.libass) {
+                    log.warn('Plugin libass ainda não inicializado, aguardando...');
+                    return; 
+                }
 
                 subtitlesLoaded.current = true;
                 if (subtitlePollingRef.current) clearInterval(subtitlePollingRef.current);
@@ -167,17 +192,26 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
                             ...validated
                         ],
                         onSelect: function (item) {
+                            log.info('Legenda selecionada:', item);
                             if (!art.libass) {
+                                log.error('Plugin libass não disponível!');
                                 art.notice.show = 'Erro: Plugin indisponível';
                                 return item.html;
                             }
                             if (item.url === 'off') {
+                                log.info('Desativando legendas');
                                 art.libass.hide();
                                 art.notice.show = 'Legenda Desativada';
                             } else {
-                                art.libass.switch(item.url);
-                                art.libass.show();
-                                art.notice.show = `Legenda: ${item.html.replace(/<[^>]*>?/gm, '')}`;
+                                log.info('Carregando legenda:', item.url);
+                                try {
+                                    art.libass.switch(item.url);
+                                    art.libass.show();
+                                    art.notice.show = `Legenda: ${item.html.replace(/<[^>]*>?/gm, '')}`;
+                                } catch (e) {
+                                    log.error('Erro ao carregar legenda:', e);
+                                    art.notice.show = 'Erro ao carregar legenda';
+                                }
                             }
                             return item.html;
                         },
@@ -185,11 +219,17 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
 
                     if (art.setting.find('subtitle')) {
                         art.setting.update(subtitleMenu);
+                        log.info('Menu de legendas atualizado');
                     } else {
                         art.setting.add(subtitleMenu);
+                        log.info('Menu de legendas adicionado');
                     }
                     art.notice.show = 'Legendas Disponíveis';
-                } catch (err) { }
+                } catch (err) {
+                    log.error('Erro ao criar menu de legendas:', err);
+                }
+            } else {
+                log.info('Nenhuma legenda encontrada ainda');
             }
         };
         poll();
@@ -202,30 +242,34 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
                 const statusResp = await fetch(`http://127.0.0.1:8080/hls/status/${hash}`, { signal });
                 if (statusResp.ok) {
                     const data = await statusResp.json();
-                    if (data.duration > 0) {
-                        knownDuration.current = data.duration;
-                        setDisplayTotal(formatTime(data.duration));
-                        return true;
+                    const hasPlaylist = !!data.playlist_url;
+                    const hasContent = data.duration > 0 || data.segments_count > 0;
+                    const isProcessing = data.status === 'processing' || data.status === 'converting' || data.status === 'completed';
+                    
+                    if (hasPlaylist && (hasContent || isProcessing)) {
+                        if (data.duration > 0) {
+                            knownDuration.current = data.duration;
+                            setDisplayTotal(formatTime(data.duration));
+                        }
+                        return data;
                     }
-                    if (data.segments_count > 0) return true;
                 }
-                const playlistResp = await fetch(`http://127.0.0.1:8080/hls/playlist/${hash}`, { method: 'HEAD', signal });
-                if (playlistResp.ok) return true;
             } catch (e) { }
-            return false;
+            return null;
         };
 
         const startTime = Date.now();
         while (Date.now() - startTime < 60000) { 
             if (signal.aborted) throw new Error('Aborted');
-            if (await check()) return true;
-            await new Promise(r => setTimeout(r, 1500));
+            const statusData = await check();
+            if (statusData) return statusData;
+            await new Promise(r => setTimeout(r, 3000));
         }
-        return false;
+        return null;
     }, []);
 
     const initPlayer = useCallback(async () => {
-        log.info('initPlayer disparado');
+        log.info('initPlayer disparado', { hlsId, torrentHash, videoUrl, fileIndex });
         
         if (artInstance.current) {
             savePlaybackPosition();
@@ -250,31 +294,33 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
         setIsLoading(true);
         durationInjected.current = false;
         subtitlesLoaded.current = false;
+        positionRestored.current = false;
+        hlsReadyRef.current = false;
 
         try {
             const hashToUse = hlsId || torrentHash;
             const isHls = !!hashToUse;
-            const finalUrl = isHls 
-                ? `http://127.0.0.1:8080/hls/playlist/${hashToUse}`
-                : videoUrl;
-
-            if (!finalUrl) return;
+            let finalUrl = videoUrl;
+            
+            log.info('hashToUse:', hashToUse, 'isHls:', isHls);
+            
             if (isHls) {
-                log.info('Aguardando HLS ready...');
-                const ready = await waitForHlsReady(hashToUse, signal);
-                if (!ready) {
+                log.info('Aguardando HLS ready para hash:', hashToUse);
+                const statusData = await waitForHlsReady(hashToUse, signal);
+                if (!statusData || !statusData.playlist_url) {
                     if (!signal.aborted) toast({ title: 'Erro', description: 'Tempo limite excedido.', status: 'error' });
                     return;
                 }
-                log.info('Esperando buffer do servidor (2s)...');
-                await new Promise(r => setTimeout(r, 2000));
+                finalUrl = statusData.playlist_url;
+                hlsReadyRef.current = true;
+                log.info('Usando playlist_url do status:', finalUrl, 'duration:', statusData.duration);
             }
 
+            if (!finalUrl) return;
             if (signal.aborted) return;
             if (!artRef.current) return;
 
             log.info('Instanciando Artplayer...');
-
             const art = new Artplayer({
                 container: artRef.current,
                 url: finalUrl,
@@ -295,29 +341,57 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
                 playsInline: true,
                 customType: {
                     m3u8: (video, url) => {
-                        if (knownDuration.current > 0) injectDurationToVideo(video, knownDuration.current);
+                        if (knownDuration.current > 0) {
+                            injectDurationToVideo(video, knownDuration.current);
+                        }
                         
                         if (Hls.isSupported()) {
+                            let loadRetryCount = 0;
+                            const maxLoadRetries = 15; 
+                            let isDestroyed = false; 
+                            
                             const hls = new Hls({ 
                                 debug: false, 
                                 enableWorker: true,
-                                manifestLoadingTimeOut: 20000, 
-                                manifestLoadingMaxRetry: 20, 
+                                manifestLoadingTimeOut: 30000, 
+                                manifestLoadingMaxRetry: 10, 
                                 manifestLoadingRetryDelay: 2000, 
-                                levelLoadingTimeOut: 20000,
-                                levelLoadingMaxRetry: 10,
-                                fragLoadingTimeOut: 20000,
-                                fragLoadingMaxRetry: 10,
+                                levelLoadingTimeOut: 20000, 
+                                levelLoadingMaxRetry: 10, 
+                                fragLoadingTimeOut: 20000, 
+                                fragLoadingMaxRetry: 10, 
+                                startLevel: 0,
+                                autoStartLoad: true,
                             });
                             
                             hlsInstance.current = hls;
                             hls.loadSource(url);
                             hls.attachMedia(video);
-                            
-                            hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
 
+                            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                                if (isDestroyed) return;
+                                log.info('Manifest parsed, iniciando reprodução...');
+                                hls.startLoad();
+                                video.play().catch(() => {});
+                            });
+                            
                             hls.on(Hls.Events.ERROR, function (event, data) {
-                                if (data.fatal) {
+                                if (isDestroyed) return; 
+                                
+                                if (data.details === 'manifestLoadError' || data.details === 'manifestParsingError') {
+                                    loadRetryCount++;
+                                    log.warn(`Playlist não encontrada (tentativa ${loadRetryCount}/${maxLoadRetries})`);
+                                    if (loadRetryCount < maxLoadRetries && !isDestroyed) {
+                                        setTimeout(() => {
+                                            if (!isDestroyed) { 
+                                                hls.loadSource(url);
+                                            }
+                                        }, 2000);
+                                        return;
+                                    }
+                                }
+                                
+                                if (data.fatal && !isDestroyed) {
                                     switch (data.type) {
                                         case Hls.ErrorTypes.NETWORK_ERROR:
                                             log.warn('Erro de Rede HLS, tentando recuperar...', data.details);
@@ -329,10 +403,15 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
                                             break;
                                         default:
                                             log.error('Erro Fatal HLS');
+                                            isDestroyed = true;
                                             hls.destroy();
                                             break;
                                     }
                                 }
+                            });
+
+                            video.addEventListener('emptied', () => {
+                                isDestroyed = true;
                             });
 
                         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -351,7 +430,13 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
             });
 
             art.on('artplayerPluginLibass:init', (adapter) => {
+                log.info('Plugin libass inicializado!');
                 art.libass = adapter;
+                
+                if (isHls && hashToUse && hlsReadyRef.current) {
+                    log.info('Iniciando polling de legendas após libass init');
+                    startSubtitlePolling(art, hashToUse);
+                }
             });
 
             art.on('ready', () => {
@@ -362,8 +447,6 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
                 log.info('Player Ready');
                 setIsLoading(false);
                 restorePlaybackPosition(art);
-
-                if (isHls) startSubtitlePolling(art, hashToUse);
             });
 
             art.on('video:timeupdate', () => {
@@ -371,9 +454,11 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
             });
 
             art.on('video:loadedmetadata', () => {
-                if (art.video && (!durationInjected.current || art.video.duration > durationInjected.current)) {
-                     setDisplayTotal(formatTime(art.video.duration));
-                     if (art.video.duration > 1) injectDurationToVideo(art.video, art.video.duration);
+                if (art.video && art.video.duration > 1) {
+                    setDisplayTotal(formatTime(art.video.duration));
+                    if (!durationInjected.current || art.video.duration > durationInjected.current) {
+                        injectDurationToVideo(art.video, art.video.duration);
+                    }
                 }
             });
 
@@ -387,17 +472,32 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
             artInstance.current = art;
 
         } catch (error) {
-            log.error('Player setup exception:', error);
+            if (error?.message === 'Aborted' || signal.aborted) {
+                log.info('Player setup abortado (mudança de vídeo)');
+            } else {
+                log.error('Player setup exception:', error);
+            }
             if (!signal.aborted) setIsLoading(false);
         }
     }, [
-        videoUrl, torrentHash, hlsId, posterUrl, defaultPoster, subContentTemplate, 
+        videoUrl, torrentHash, hlsId, fileIndex, posterUrl, defaultPoster, subContentTemplate, 
         injectDurationToVideo, toast, savePlaybackPosition, restorePlaybackPosition, 
         waitForHlsReady, startSubtitlePolling
     ]);
 
     useEffect(() => {
-        getSubtitleTemplate().then(tmpl => { if (tmpl) setSubContentTemplate(tmpl); });
+        const cached = dataCache.get('subtitle_template');
+        if (cached) {
+            setSubContentTemplate(cached);
+            return;
+        }
+        
+        getSubtitleTemplate().then(tmpl => {
+            if (tmpl) {
+                dataCache.set('subtitle_template', tmpl);
+                setSubContentTemplate(tmpl);
+            }
+        });
     }, []);
 
     useEffect(() => {
@@ -405,10 +505,15 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
         return () => {
             if (abortController.current) abortController.current.abort();
             if (subtitlePollingRef.current) clearInterval(subtitlePollingRef.current);
-            if (hlsInstance.current) { hlsInstance.current.destroy(); hlsInstance.current = null; }
+            if (hlsInstance.current) { 
+                hlsInstance.current.destroy(); 
+                hlsInstance.current = null; 
+            }
             if (artInstance.current) {
                 if(artInstance.current.currentTime > 5) {
-                    const key = `waluna_player_pos_${torrentHash || videoUrl}`;
+                    const base = hlsId || torrentHash || videoUrl;
+                    const fileId = fileIndex !== null ? `_file${fileIndex}` : '';
+                    const key = `waluna_player_pos_${base}${fileId}`;
                     localStorage.setItem(key, artInstance.current.currentTime.toString());
                 }
                 artInstance.current.destroy(false);
@@ -416,9 +521,9 @@ const VideoPlayer = ({ videoUrl, posterUrl, torrentHash, hlsId }) => {
             }
             if (artRef.current) artRef.current.innerHTML = '';
         };
-    }, [initPlayer, torrentHash, hlsId, videoUrl]);
+    }, [initPlayer, torrentHash, hlsId, fileIndex, videoUrl]);
 
-return (
+    return (
         <VStack spacing={4} w="100%">
             <MotionBox
                 key={hlsId || torrentHash || videoUrl}
@@ -450,7 +555,6 @@ return (
                             backgroundRepeat: 'no-repeat'
                         }}
                     >
-                        {/*camada sobre a imagem */}
                         <Box
                             position="absolute"
                             inset={0}
@@ -460,13 +564,9 @@ return (
                             alignItems="center"
                             justifyContent="center"
                         >
-                            {/* texto*/}
                             <VStack
                                 spacing={4}
                                 p={8}
-                                //bg="rgba(0, 0, 0, 0.2)"
-                                //borderRadius="xl"
-                                //	border="1px solid rgba(255, 255, 255, 0.1)"
                                 textAlign="center"
                             >
                                 <Spinner size="xl" color="purple.400" thickness="3px" mb={2} />

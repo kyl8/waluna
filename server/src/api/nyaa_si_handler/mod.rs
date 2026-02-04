@@ -23,7 +23,7 @@ impl NyaaService {
         let search_query = QueryBuilder::new()
             .search(query)
             .category(NyaaCategory::Anime)
-            .filter(Filter::TrustedOnly)
+            //.filter(Filter::TrustedOnly)
             .sort(Sort::Seeders)
             .page(1)
             .build();

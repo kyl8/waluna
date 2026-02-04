@@ -148,6 +148,14 @@ const EpisodeDetailModal = ({ isOpen, onClose, episode }) => {
     return num.toString();
   }, []);
 
+  const handleDownload = useCallback((torrent) => {
+    window.open(torrent.torrent_url || torrent.link);
+  }, []);
+
+  const handleMagnet = useCallback((torrent) => {
+    navigator.clipboard?.writeText(torrent.magnet || torrent.magnetLink);
+  }, []);
+
   useEffect(() => {
     if (!containerRef.current) return;
     const width = containerRef.current.clientWidth;

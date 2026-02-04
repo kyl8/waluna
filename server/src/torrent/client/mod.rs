@@ -10,6 +10,7 @@ use librqbit::SessionOptions;
 use librqbit::PeerConnectionOptions;
 
 use tracing::{info, debug, warn, error};
+use walkdir::WalkDir;
 use std::time::Duration;
 
 type DownloadsMap = Arc<RwLock<HashMap<String, ActiveDownload>>>;
@@ -39,6 +40,15 @@ pub struct DownloadInfo {
 pub struct PeerInfo {
     pub addr: String,
     pub connected: bool,
+}
+
+/// Informações sobre um arquivo de vídeo dentro de um torrent
+#[derive(Serialize, Clone, Debug)]
+pub struct TorrentFileInfo {
+    pub name: String,
+    pub path: String,
+    pub size: u64,
+    pub index: usize,
 }
 
 struct ActiveDownload {
@@ -193,7 +203,7 @@ impl Client {
                 download_id.clone(),
                 ActiveDownload {
                     torrent_id,
-                    torrent_name,
+                    torrent_name: torrent_name.clone(),
                     info: initial_info,
                     last_update: std::time::Instant::now(),
                     last_downloaded: 0,
@@ -232,17 +242,16 @@ impl Client {
                         // Primeiro, atualizar as informações do torrent (para obter nome correto)
                         match Self::update_torrent_info_static(&session, active_dl.torrent_id, active_dl).await {
                             Ok(()) => {
-                                // Tentar renomear arquivo após 4 segundos (quando nome já foi atualizado)
-                                if !file_renamed && rename_attempt_time.elapsed().as_secs() > 4 {
+                                // Tentar criar mapeamento após 1 segundo (salva arquivo .meta que mapeia download_id -> pasta)
+                                if !file_renamed && rename_attempt_time.elapsed().as_secs() > 1 {
                                     let torrent_name = active_dl.torrent_name.clone();
-                                    let torrent_id = active_dl.torrent_id;
-                                    match Self::rename_download_file_with_session(&session, torrent_id, &download_id, &torrent_name).await {
+                                    match Self::create_download_mapping(&download_id, &torrent_name).await {
                                         Ok(_) => {
                                             file_renamed = true;
-                                            info!(download_id = %download_id, "Tentativa de renomear concluída");
+                                            info!(download_id = %download_id, torrent_name = %torrent_name, "Mapeamento criado");
                                         }
                                         Err(e) => {
-                                            warn!(download_id = %download_id, error = %e, "Erro ao renomear arquivo");
+                                            warn!(download_id = %download_id, error = %e, "Erro ao criar mapeamento");
                                         }
                                     }
                                 }
@@ -343,7 +352,6 @@ impl Client {
         let downloaded_delta = stats.progress_bytes.saturating_sub(active_dl.last_downloaded);
         let uploaded_delta = stats.uploaded_bytes.saturating_sub(active_dl.last_uploaded);
 
-        // DEBUG: Log detalhado para entender o que está acontecendo
         debug!(
             elapsed = elapsed,
             downloaded_delta = downloaded_delta,
@@ -352,7 +360,7 @@ impl Client {
             current_uploaded = stats.uploaded_bytes,
             last_progress = active_dl.last_downloaded,
             last_uploaded = active_dl.last_uploaded,
-            "🔍 Calculando velocidades"
+            "Calculando velocidades"
         );
 
         // Converte para velocidade (bytes por segundo)
@@ -485,11 +493,179 @@ impl Client {
             .map(|s| s.to_lowercase())
     }
 
-    /// Renomeia o arquivo baixado para usar o download_id como nome
-    /// Obtém o nome do torrent da librqbit, procura esse arquivo na pasta e renomeia para download_id
+    /// Retorna o nome real do torrent (pasta ou arquivo) para um download_id
+    /// Útil para encontrar arquivos quando o torrent baixa com nome original
+    #[tracing::instrument(skip(self))]
+    pub async fn get_torrent_name(&self, download_id: &str) -> Option<String> {
+        let downloads = self.active_downloads.read().await;
+        downloads.get(download_id).map(|dl| dl.torrent_name.clone())
+            .or_else(|| Self::get_torrent_name_from_mapping(download_id))
+    }
+
+    /// Lista todos os arquivos de vídeo em um torrent (para torrents com múltiplos arquivos)
+    /// Retorna Vec<(nome_arquivo, caminho_completo, tamanho)>
+    #[tracing::instrument(skip(self))]
+    pub async fn list_torrent_files(&self, download_id: &str) -> Result<Vec<TorrentFileInfo>> {
+        use std::fs;
+        use walkdir::WalkDir;
+        
+        let downloads_dir = PathBuf::from("./cache/downloads");
+        
+        // Primeiro, tenta obter o nome real do torrent
+        let torrent_name = self.get_torrent_name(download_id).await;
+        
+        let mut video_files = Vec::new();
+        let video_extensions = ["mp4", "mkv", "avi", "mov", "flv", "wmv", "webm", "m4v"];
+        
+        // Função auxiliar para verificar se é arquivo de vídeo
+        let is_video_file = |path: &std::path::Path| -> bool {
+            path.extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| video_extensions.contains(&ext.to_lowercase().as_str()))
+                .unwrap_or(false)
+        };
+        
+        // Tenta encontrar arquivos por diferentes métodos
+        let search_paths = vec![
+            // 1. Caminho direto com download_id
+            downloads_dir.join(download_id),
+            // 2. Caminho com nome do torrent
+            torrent_name.as_ref().map(|n| downloads_dir.join(n)).unwrap_or_default(),
+        ];
+        
+        for base_path in search_paths {
+            if !base_path.exists() {
+                continue;
+            }
+            
+            if base_path.is_file() && is_video_file(&base_path) {
+                // É um arquivo único
+                let file_name = base_path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                let file_size = fs::metadata(&base_path).map(|m| m.len()).unwrap_or(0);
+                
+                video_files.push(TorrentFileInfo {
+                    name: file_name,
+                    path: base_path.to_string_lossy().to_string(),
+                    size: file_size,
+                    index: 0,
+                });
+                break;
+            } else if base_path.is_dir() {
+                // É uma pasta com múltiplos arquivos
+                for (index, entry) in WalkDir::new(&base_path)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.path().is_file() && is_video_file(e.path()))
+                    .enumerate()
+                {
+                    let path = entry.path();
+                    let file_name = path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    let file_size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+                    
+                    video_files.push(TorrentFileInfo {
+                        name: file_name,
+                        path: path.to_string_lossy().to_string(),
+                        size: file_size,
+                        index,
+                    });
+                }
+                
+                if !video_files.is_empty() {
+                    break;
+                }
+            }
+        }
+        
+        // Se ainda não encontrou, procura qualquer coisa que contenha o download_id ou torrent_name
+        if video_files.is_empty() {
+            if let Ok(entries) = fs::read_dir(&downloads_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let name = path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .to_string();
+                    
+                    let matches = name.contains(download_id) || 
+                        torrent_name.as_ref().map(|tn| name.contains(tn)).unwrap_or(false);
+                    
+                    if !matches {
+                        continue;
+                    }
+                    
+                    if path.is_file() && is_video_file(&path) {
+                        let file_size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                        video_files.push(TorrentFileInfo {
+                            name,
+                            path: path.to_string_lossy().to_string(),
+                            size: file_size,
+                            index: 0,
+                        });
+                    } else if path.is_dir() {
+                        for (index, entry) in WalkDir::new(&path)
+                            .into_iter()
+                            .filter_map(|e| e.ok())
+                            .filter(|e| e.path().is_file() && is_video_file(e.path()))
+                            .enumerate()
+                        {
+                            let file_path = entry.path();
+                            let file_name = file_path.file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("unknown")
+                                .to_string();
+                            let file_size = fs::metadata(file_path).map(|m| m.len()).unwrap_or(0);
+                            
+                            video_files.push(TorrentFileInfo {
+                                name: file_name,
+                                path: file_path.to_string_lossy().to_string(),
+                                size: file_size,
+                                index,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Ordena por nome para consistência
+        video_files.sort_by(|a, b| a.name.cmp(&b.name));
+        
+        // Reindexar após ordenação
+        for (i, file) in video_files.iter_mut().enumerate() {
+            file.index = i;
+        }
+        
+        info!(download_id = %download_id, files_count = video_files.len(), "Arquivos de vídeo encontrados");
+        
+        Ok(video_files)
+    }
+
+    // Encontra um arquivo de vídeo específico pelo índice em um torrent com múltiplos arquivos
+    #[tracing::instrument(skip(self))]
+    pub async fn get_video_file_by_index(&self, download_id: &str, file_index: usize) -> Result<TorrentFileInfo> {
+        let files = self.list_torrent_files(download_id).await?;
+        
+        files.get(file_index)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!(
+                "Arquivo de vídeo com índice {} não encontrado. Total de arquivos: {}", 
+                file_index, 
+                files.len()
+            ))
+    }
+
+    // Renomeia o arquivo baixado para usar o download_id como nome
+    // Obtém o nome do torrent da librqbit, procura esse arquivo na pasta e renomeia para download_id
     async fn rename_download_file_with_session(_session: &Arc<Session>, _torrent_id: usize, download_id: &str, torrent_name: &str) -> Result<()> {
         use std::fs;
         use std::path::PathBuf;
+        use std::time::Duration;
         
         let downloads_dir = PathBuf::from("./cache/downloads");
         
@@ -501,32 +677,32 @@ impl Client {
             return Ok(());
         }
         
-        // Verificar se já existe arquivo com download_id
+        // Verificar se já existe arquivo ou pasta com download_id
         if let Ok(entries) = fs::read_dir(&downloads_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if let Some(filename) = path.file_name() {
                     let name = filename.to_string_lossy().to_string();
-                    if name.starts_with(download_id) && path.is_file() {
-                        info!(download_id = %download_id, existing_file = %name, "Arquivo já existe com download_id");
+                    if name.starts_with(download_id) {
+                        info!(download_id = %download_id, existing_item = %name, "Arquivo/pasta já existe com download_id");
                         return Ok(());
                     }
                 }
             }
         }
         
-        // Procurar pelo arquivo do torrent
+        // Procurar pelo arquivo ou pasta do torrent
         if let Ok(entries) = fs::read_dir(&downloads_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 
-                if path.is_file() {
-                    if let Some(filename) = path.file_name() {
-                        let name = filename.to_string_lossy().to_string();
-                        
-                        // Verificar se é o arquivo do torrent (comparar nome)
-                        // Pode ser o nome exato ou começar com o nome (em caso de extensões diferentes)
-                        if name == torrent_name || name.starts_with(&torrent_name) {
+                if let Some(filename) = path.file_name() {
+                    let name = filename.to_string_lossy().to_string();
+                    
+                    // Verificar se é o arquivo ou pasta do torrent (comparar nome)
+                    if name == torrent_name || name.starts_with(&torrent_name) {
+                        if path.is_file() {
+                            // ===== ARQUIVO ÚNICO =====
                             info!(download_id = %download_id, torrent_name = %torrent_name, found_file = %name, "Arquivo do torrent encontrado");
                             
                             // Extrair extensão do arquivo original
@@ -544,10 +720,10 @@ impl Client {
                             
                             let new_path = downloads_dir.join(&new_filename);
                             
-                            info!(download_id = %download_id, old_file = %name, new_file = %new_filename, "Tentando renomear...");
+                            info!(download_id = %download_id, old_file = %name, new_file = %new_filename, "Tentando renomear arquivo...");
                             
-                            // Tenta renomar o arquivo
-                            match fs::rename(&path, &new_path) {
+                            // Tenta renomar o arquivo com retry
+                            match Self::rename_with_retry(&path, &new_path, download_id, &name, &new_filename).await {
                                 Ok(_) => {
                                     info!(
                                         download_id = %download_id,
@@ -565,7 +741,43 @@ impl Client {
                                         error = %e,
                                         "Falha ao renomear arquivo"
                                     );
-                                    return Err(e.into());
+                                    return Err(anyhow::anyhow!(e));
+                                }
+                            }
+                        } else if path.is_dir() {
+                            // ===== PASTA (MULTI-ARQUIVO) =====
+                            info!(download_id = %download_id, torrent_name = %torrent_name, found_dir = %name, "Pasta do torrent multi-arquivo encontrada");
+                            
+                            let new_dirname = download_id.to_string();
+                            let new_path = downloads_dir.join(&new_dirname);
+                            
+                            // Só renomeia se o novo path não existe
+                            if new_path.exists() {
+                                info!(download_id = %download_id, "Pasta com download_id já existe, pulando renomeação");
+                                return Ok(());
+                            }
+                            
+                            info!(download_id = %download_id, old_dir = %name, new_dir = %new_dirname, "Tentando renomear pasta...");
+                            
+                            // Tenta renomar a pasta com retry
+                            match Self::rename_with_retry(&path, &new_path, download_id, &name, &new_dirname).await {
+                                Ok(_) => {
+                                    info!(
+                                        download_id = %download_id,
+                                        old_name = %name,
+                                        new_name = %new_dirname,
+                                        "Pasta renomeada com sucesso! (multi-arquivo)"
+                                    );
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    error!(
+                                        download_id = %download_id,
+                                        old_name = %name,
+                                        error = %e,
+                                        "Falha ao renomear pasta"
+                                    );
+                                    return Err(anyhow::anyhow!(e));
                                 }
                             }
                         }
@@ -574,8 +786,117 @@ impl Client {
             }
         }
         
-        warn!(download_id = %download_id, torrent_name = %torrent_name, "Arquivo do torrent não encontrado na pasta downloads");
+        warn!(download_id = %download_id, torrent_name = %torrent_name, "Arquivo/pasta do torrent não encontrado na pasta downloads");
         Ok(())
+    }
+
+    // Cria arquivo de mapeamento download_id -> torrent_name (sem renomear a pasta)
+    // Isso permite encontrar a pasta/arquivo pelo download_id sem renomear
+    async fn create_download_mapping(download_id: &str, torrent_name: &str) -> Result<()> {
+        use std::fs;
+        use std::path::PathBuf;
+        
+        let downloads_dir = PathBuf::from("./cache/downloads");
+        let meta_file = downloads_dir.join(format!("{}.meta", download_id));
+        
+        // Se já existe, não precisa criar novamente
+        if meta_file.exists() {
+            return Ok(());
+        }
+        
+        // Verifica se a pasta/arquivo do torrent existe
+        let torrent_path = downloads_dir.join(torrent_name);
+        if !torrent_path.exists() {
+            // Tenta encontrar por nome parcial
+            if let Ok(entries) = fs::read_dir(&downloads_dir) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with(torrent_name) || torrent_name.starts_with(&name) {
+                        // Encontrou, salva o mapeamento
+                        let content = serde_json::json!({
+                            "download_id": download_id,
+                            "torrent_name": name,
+                            "created_at": chrono::Utc::now().to_rfc3339()
+                        });
+                        fs::write(&meta_file, serde_json::to_string_pretty(&content)?)?;
+                        info!(download_id = %download_id, mapped_to = %name, "Mapeamento salvo em arquivo .meta");
+                        return Ok(());
+                    }
+                }
+            }
+            return Err(anyhow::anyhow!("Pasta/arquivo do torrent não encontrado: {}", torrent_name));
+        }
+        
+        // Salva o mapeamento
+        let content = serde_json::json!({
+            "download_id": download_id,
+            "torrent_name": torrent_name,
+            "created_at": chrono::Utc::now().to_rfc3339()
+        });
+        fs::write(&meta_file, serde_json::to_string_pretty(&content)?)?;
+        info!(download_id = %download_id, torrent_name = %torrent_name, "Mapeamento salvo em arquivo .meta");
+        
+        Ok(())
+    }
+
+    /// Lê o mapeamento download_id -> torrent_name do arquivo .meta
+    pub fn get_torrent_name_from_mapping(download_id: &str) -> Option<String> {
+        use std::fs;
+        use std::path::PathBuf;
+        
+        let downloads_dir = PathBuf::from("./cache/downloads");
+        let meta_file = downloads_dir.join(format!("{}.meta", download_id));
+        
+        if let Ok(content) = fs::read_to_string(&meta_file) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                return json.get("torrent_name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+            }
+        }
+        
+        None
+    }
+
+    // Função auxiliar para renomear com retry (aguarda liberação de recursos)
+    #[allow(dead_code)]
+    async fn rename_with_retry(
+        old_path: &std::path::Path,
+        new_path: &std::path::Path,
+        download_id: &str,
+        old_name: &str,
+        new_name: &str,
+    ) -> Result<(), String> {
+        use std::fs;
+        use std::time::Duration;
+        
+        let max_retries = 5;
+        let mut attempt = 0;
+        
+        loop {
+            attempt += 1;
+            
+            match fs::rename(old_path, new_path) {
+                Ok(_) => {
+                    info!(download_id = %download_id, attempt = attempt, "Renomeação bem-sucedida na tentativa {}", attempt);
+                    return Ok(());
+                }
+                Err(e) if attempt < max_retries => {
+                    warn!(
+                        download_id = %download_id,
+                        attempt = attempt,
+                        error = %e,
+                        "Falha na tentativa {} de renomear, aguardando 2s...",
+                        attempt
+                    );
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+                Err(e) => {
+                    error!(download_id = %download_id, attempt = attempt, error = %e, "Falha na {} tentativa (final)", attempt);
+                    return Err(format!("Falha ao renomear após {} tentativas: {}", attempt, e));
+                }
+            }
+        }
     }
 }
 

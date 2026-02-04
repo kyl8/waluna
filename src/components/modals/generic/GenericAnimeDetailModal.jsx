@@ -29,6 +29,7 @@ import {
   FaPlay 
 } from 'react-icons/fa';
 import GenericEpisodeDetailModal from './GenericEpisodeDetailModal';
+import { dataCache } from '../../../utils/cache/memoryCache.js';
 const GenericAnimeDetailModal= ({ 
   isOpen,
   onClose, 
@@ -56,6 +57,13 @@ const GenericAnimeDetailModal= ({
         return;
       }
 
+      const cacheKey = `generic_episodes_${anime.id || anime.anilist_id}`;
+      const cached = dataCache.get(cacheKey);
+      if (cached) {
+        setEpisodes(cached);
+        return;
+      }
+
       if (!fetchEpisodes) {
         setError('Função de busca de episódios não disponível para esta source');
         setEpisodes([]);
@@ -67,7 +75,9 @@ const GenericAnimeDetailModal= ({
 
       try {
         const result = await fetchEpisodes(anime);
-        setEpisodes(Array.isArray(result) ? result : []);
+        const episodeList = Array.isArray(result) ? result : [];
+        dataCache.set(cacheKey, episodeList);
+        setEpisodes(episodeList);
         setRetryCount(0);
       } catch (err) {
         setError(err.message || 'Erro desconhecido ao carregar episódios');
